@@ -12,6 +12,8 @@ import {
   MapPinOff,
   CheckCircle2,
   AlertCircle,
+  Pencil,
+  History,
 } from "lucide-react";
 import type { Fichada, Dependencia } from "@/lib/supabase";
 import { calcularDistancia } from "@/lib/gpsConfig";
@@ -25,6 +27,7 @@ interface FichadasTableProps {
   fichadas: FichadaConDependencia[];
   loading: boolean;
   onSelectFichada: (fichada: FichadaConDependencia) => void;
+  onEditFichada?: (fichada: FichadaConDependencia) => void;
 }
 
 const formatDateTime = (dateString: string) => {
@@ -69,6 +72,7 @@ export default function FichadasTable({
   fichadas,
   loading,
   onSelectFichada,
+  onEditFichada,
 }: FichadasTableProps) {
   if (loading) {
     return <LoadingSpinner message="Cargando fichadas..." />;
@@ -165,6 +169,13 @@ export default function FichadasTable({
                     <span className="text-sm font-medium text-gray-900 dark:text-white">
                       {fichada.documento}
                     </span>
+                    {fichada.editado_at && (
+                      <span
+                        title={`Editado por ${fichada.editado_por || "RRHH"} el ${new Date(fichada.editado_at).toLocaleString("es-AR", { hour12: false })}`}
+                      >
+                        <History className="w-3.5 h-3.5 text-gray-400" />
+                      </span>
+                    )}
                   </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
@@ -262,6 +273,15 @@ export default function FichadasTable({
                     >
                       <Eye className="w-4 h-4" />
                     </button>
+                    {onEditFichada && (
+                      <button
+                        onClick={() => onEditFichada(fichada)}
+                        className="text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] font-medium"
+                        title="Editar registro"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

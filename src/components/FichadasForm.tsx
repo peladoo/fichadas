@@ -6,8 +6,11 @@ import FichadaSuccess from "./FichadaSuccess";
 import {
   supabase,
   type FichadaInsert,
+  type FichadaExtraInsert,
+  type FichadaExtraCierre,
   type Dependencia,
   type TipoFichada,
+  type TipoJornada,
 } from "@/lib/supabase";
 import {
   validarUbicacionParaFichar,
@@ -21,8 +24,9 @@ import {
   compressImage,
   logger,
 } from "@/lib/utils";
+import { getEstadoEmpleado, validarAccion } from "@/lib/jornadas";
 import { APP_VERSION } from "@/lib/version";
-import { MapPin, AlertCircle, Building2, LogIn, LogOut } from "lucide-react";
+import { MapPin, AlertCircle, Building2, LogIn, LogOut, Clock } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Tipos locales
@@ -30,6 +34,7 @@ import { MapPin, AlertCircle, Building2, LogIn, LogOut } from "lucide-react";
 
 interface FichadaExitosa {
   tipoFichada: TipoFichada;
+  tipoJornada: TipoJornada;
   dependenciaNombre: string;
 }
 
@@ -105,6 +110,7 @@ export default function FichadasForm() {
   const [dependencia, setDependencia] = useState<Dependencia | null>(null);
   const [dependencias, setDependencias] = useState<Dependencia[]>([]);
   const [tipoFichada, setTipoFichada] = useState<TipoFichada>("entrada");
+  const [tipoJornada, setTipoJornada] = useState<TipoJornada>("normal");
   const [location, setLocation] = useState<{
     lat: number;
     lng: number;
@@ -424,6 +430,13 @@ export default function FichadasForm() {
       setError("");
 
       try {
+        const estado = await getEstadoEmpleado(dniSanitizado);
+        const validacion = validarAccion(estado, tipoJornada, tipoFichada);
+        if (!validacion.ok) {
+          setError(validacion.mensaje || "No se puede registrar esta fichada.");
+          return;
+        }
+
         // --- Etapa 1: la compresión ya se hizo al capturar, aquí solo informamos ---
         setSubmitStage("subiendo");
 
@@ -431,7 +444,8 @@ export default function FichadasForm() {
         const isWebP = photoBlob.type === "image/webp";
         const ext = isWebP ? "webp" : "jpg";
         const contentType = isWebP ? "image/webp" : "image/jpeg";
-        const fileName = `${Date.now()}-${dniSanitizado}.${ext}`;
+        const jornadaTag = tipoJornada === "extra" ? `extra-${tipoFichada}` : tipoFichada;
+        const fileName = `${Date.now()}-${dniSanitizado}-${jornadaTag}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
           .from("fotos-fichadas")
@@ -450,28 +464,82 @@ export default function FichadasForm() {
         // --- Etapa 2: insertar registro en la base de datos ---
         setSubmitStage("guardando");
 
-        const fichadaData: FichadaInsert = {
-          dependencia_id: dependencia.id,
-          documento: dniSanitizado,
-          tipo: tipoFichada,
-          foto_url: urlData.publicUrl,
-          latitud: location.lat,
-          longitud: location.lng,
-        };
+        if (tipoJornada === "extra") {
+          if (tipoFichada === "entrada") {
+            const extraData: FichadaExtraInsert = {
+              documento: dniSanitizado,
+              dependencia_id_entrada: dependencia.id,
+              foto_url_entrada: urlData.publicUrl,
+              latitud_entrada: location.lat,
+              longitud_entrada: location.lng,
+            };
+            logger.log("Enviando fichada extra (entrada):", extraData);
+            const { error: insertError } = await supabase
+              .from("fichadas_extras")
+              .insert([extraData]);
+            if (insertError) {
+              if (insertError.code === "23505") {
+                setError(
+                  "Ya tenés una fichada de horas extras abierta. Primero registrá la salida extra.",
+                );
+                return;
+              }
+              throw insertError;
+            }
+          } else {
+            if (!estado.extraAbierta) {
+              setError(
+                "No se encontró una fichada de horas extras abierta. Intentá de nuevo.",
+              );
+              return;
+            }
+            const cierre: FichadaExtraCierre = {
+              dependencia_id_salida: dependencia.id,
+              foto_url_salida: urlData.publicUrl,
+              latitud_salida: location.lat,
+              longitud_salida: location.lng,
+              fecha_hora_salida: new Date().toISOString(),
+            };
+            logger.log("Cerrando fichada extra:", cierre);
+            const { data: updated, error: updateError } = await supabase
+              .from("fichadas_extras")
+              .update(cierre)
+              .eq("id", estado.extraAbierta.id)
+              .is("fecha_hora_salida", null)
+              .select("id");
+            if (updateError) throw updateError;
+            if (!updated || updated.length === 0) {
+              setError(
+                "La fichada de horas extras ya fue cerrada. Actualizá e intentá de nuevo.",
+              );
+              return;
+            }
+          }
+        } else {
+          const fichadaData: FichadaInsert = {
+            dependencia_id: dependencia.id,
+            documento: dniSanitizado,
+            tipo: tipoFichada,
+            foto_url: urlData.publicUrl,
+            latitud: location.lat,
+            longitud: location.lng,
+          };
 
-        logger.log("Enviando fichada:", fichadaData);
+          logger.log("Enviando fichada:", fichadaData);
 
-        const { error: insertError } = await supabase
-          .from("fichadas")
-          .insert([fichadaData]);
+          const { error: insertError } = await supabase
+            .from("fichadas")
+            .insert([fichadaData]);
 
-        if (insertError) throw insertError;
+          if (insertError) throw insertError;
+        }
 
         // Éxito: revocar ObjectURL y limpiar estado
         if (photoPreview) URL.revokeObjectURL(photoPreview);
 
         setFichadaExitosa({
           tipoFichada,
+          tipoJornada,
           dependenciaNombre: dependencia.nombre,
         });
 
@@ -481,6 +549,7 @@ export default function FichadasForm() {
         setPhotoPreview("");
         setDependencia(null);
         setTipoFichada("entrada");
+        setTipoJornada("normal");
       } catch (err) {
         setError(handleSupabaseError(err));
         logger.error("Error al registrar fichada:", err);
@@ -491,7 +560,7 @@ export default function FichadasForm() {
         setSubmitStage(null);
       }
     },
-    [documento, dependencia, photoBlob, photoPreview, location, tipoFichada],
+    [documento, dependencia, photoBlob, photoPreview, location, tipoFichada, tipoJornada],
   );
 
   // ---------------------------------------------------------------------------
@@ -520,6 +589,7 @@ export default function FichadasForm() {
     return (
       <FichadaSuccess
         tipoFichada={fichadaExitosa.tipoFichada}
+        tipoJornada={fichadaExitosa.tipoJornada}
         dependenciaNombre={fichadaExitosa.dependenciaNombre}
         onVolver={() => setFichadaExitosa(null)}
       />
@@ -576,6 +646,41 @@ export default function FichadasForm() {
                 disabled={loading}
                 required
               />
+            </div>
+
+            {/* Selector de tipo de jornada */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                Tipo de jornada
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setTipoJornada("normal")}
+                  disabled={loading}
+                  className={`flex items-center justify-center gap-2 px-4 py-4 rounded-lg border-2 transition ${
+                    tipoJornada === "normal"
+                      ? "bg-[#f0f9e6] border-[#b6c544] text-[#076633] dark:bg-[#b6c544]/20 dark:border-[#b6c544] dark:text-[#b6c544]"
+                      : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
+                  }`}
+                >
+                  <Building2 className="w-5 h-5" />
+                  <span className="font-semibold">Jornada Normal</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTipoJornada("extra")}
+                  disabled={loading}
+                  className={`flex items-center justify-center gap-2 px-4 py-4 rounded-lg border-2 transition ${
+                    tipoJornada === "extra"
+                      ? "bg-[#7bcbe2]/15 border-[#7bcbe2] text-[#076633] dark:bg-[#7bcbe2]/20 dark:border-[#7bcbe2] dark:text-[#7bcbe2]"
+                      : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
+                  }`}
+                >
+                  <Clock className="w-5 h-5" />
+                  <span className="font-semibold">Horas Extras</span>
+                </button>
+              </div>
             </div>
 
             {/* Selector de Tipo de Fichada */}

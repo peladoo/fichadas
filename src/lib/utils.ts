@@ -267,6 +267,40 @@ export const getThisMonthRange = (): { desde: string; hasta: string } => {
   };
 };
 
+/**
+ * Semana en curso: desde el lunes 00:00 hasta ahora (fechas locales YYYY-MM-DD).
+ */
+export const getSemanaLunesRange = (): { desde: string; hasta: string } => {
+  const today = new Date();
+  const day = today.getDay(); // 0 domingo … 6 sábado
+  const offsetLunes = day === 0 ? 6 : day - 1;
+  const lunes = new Date(today);
+  lunes.setDate(today.getDate() - offsetLunes);
+
+  const toLocalDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const date = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${date}`;
+  };
+
+  return { desde: toLocalDate(lunes), hasta: toLocalDate(today) };
+};
+
+/**
+ * Mes actual: desde el día 1 hasta hoy (fechas locales YYYY-MM-DD).
+ */
+export const getMesActualRange = (): { desde: string; hasta: string } => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, "0");
+  const date = String(today.getDate()).padStart(2, "0");
+  return {
+    desde: `${year}-${month}-01`,
+    hasta: `${year}-${month}-${date}`,
+  };
+};
+
 // ==========================================
 // LOGGER CONDICIONAL
 // ==========================================

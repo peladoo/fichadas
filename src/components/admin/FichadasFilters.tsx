@@ -10,15 +10,23 @@ import {
 } from "lucide-react";
 import type { Dependencia } from "@/lib/supabase";
 
+export interface TipoFilterOption {
+    value: string;
+    label: string;
+}
+
 interface FichadasFiltersProps {
     searchDni: string;
     setSearchDni: (value: string) => void;
     selectedDependencia: string;
     setSelectedDependencia: (value: string) => void;
-    selectedTipoFichada: "" | "entrada" | "salida";
-    setSelectedTipoFichada: (value: "" | "entrada" | "salida") => void;
+    selectedTipo: string;
+    setSelectedTipo: (value: string) => void;
+    tipoOptions?: TipoFilterOption[];
+    tipoLabel?: string;
     soloFueraDeRango: boolean;
     setSoloFueraDeRango: (value: boolean) => void;
+    showGpsFilter?: boolean;
     fechaDesde: string;
     setFechaDesde: (value: string) => void;
     fechaHasta: string;
@@ -28,15 +36,24 @@ interface FichadasFiltersProps {
     onQuickFilter: (type: "hoy" | "semana" | "mes") => void;
 }
 
+const DEFAULT_TIPO_OPTIONS: TipoFilterOption[] = [
+    { value: "", label: "Todos" },
+    { value: "entrada", label: "Entrada" },
+    { value: "salida", label: "Salida" },
+];
+
 export default function FichadasFilters({
     searchDni,
     setSearchDni,
     selectedDependencia,
     setSelectedDependencia,
-    selectedTipoFichada,
-    setSelectedTipoFichada,
+    selectedTipo,
+    setSelectedTipo,
+    tipoOptions = DEFAULT_TIPO_OPTIONS,
+    tipoLabel = "Tipo",
     soloFueraDeRango,
     setSoloFueraDeRango,
+    showGpsFilter = true,
     fechaDesde,
     setFechaDesde,
     fechaHasta,
@@ -64,7 +81,6 @@ export default function FichadasFilters({
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                {/* DNI */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         <Search className="w-4 h-4 inline mr-1" />
@@ -81,7 +97,6 @@ export default function FichadasFilters({
                     />
                 </div>
 
-                {/* Dependencia */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         <Building2 className="w-4 h-4 inline mr-1" />
@@ -101,28 +116,24 @@ export default function FichadasFilters({
                     </select>
                 </div>
 
-                {/* Tipo de Fichada */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         <Filter className="w-4 h-4 inline mr-1" />
-                        Tipo
+                        {tipoLabel}
                     </label>
                     <select
-                        value={selectedTipoFichada}
-                        onChange={(e) =>
-                            setSelectedTipoFichada(
-                                e.target.value as "" | "entrada" | "salida"
-                            )
-                        }
+                        value={selectedTipo}
+                        onChange={(e) => setSelectedTipo(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
                     >
-                        <option value="">Todos</option>
-                        <option value="entrada">Entrada</option>
-                        <option value="salida">Salida</option>
+                        {tipoOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                            </option>
+                        ))}
                     </select>
                 </div>
 
-                {/* Fecha Desde */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         <Calendar className="w-4 h-4 inline mr-1" />
@@ -136,7 +147,6 @@ export default function FichadasFilters({
                     />
                 </div>
 
-                {/* Fecha Hasta */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         <Calendar className="w-4 h-4 inline mr-1" />
@@ -151,7 +161,6 @@ export default function FichadasFilters({
                 </div>
             </div>
 
-            {/* Filtros rápidos */}
             <div className="mt-4 flex flex-wrap gap-2">
                 <button
                     onClick={() => onQuickFilter("hoy")}
@@ -173,21 +182,22 @@ export default function FichadasFilters({
                 </button>
             </div>
 
-            {/* Filtro GPS */}
-            <div className="mt-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={soloFueraDeRango}
-                        onChange={(e) => setSoloFueraDeRango(e.target.checked)}
-                        className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
-                    />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
-                        <MapPinOff className="w-4 h-4 text-orange-600" />
-                        Solo fichadas fuera de rango GPS
-                    </span>
-                </label>
-            </div>
+            {showGpsFilter && (
+                <div className="mt-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={soloFueraDeRango}
+                            onChange={(e) => setSoloFueraDeRango(e.target.checked)}
+                            className="w-4 h-4 text-orange-600 bg-gray-100 border-gray-300 rounded focus:ring-orange-500 dark:focus:ring-orange-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer"
+                        />
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-1">
+                            <MapPinOff className="w-4 h-4 text-orange-600" />
+                            Solo fichadas fuera de rango GPS
+                        </span>
+                    </label>
+                </div>
+            )}
         </div>
     );
 }

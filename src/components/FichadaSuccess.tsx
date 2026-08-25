@@ -1,20 +1,30 @@
 "use client";
 
 import { CheckCircle, LogIn, LogOut, Building2, ArrowLeft, Clock } from "lucide-react";
-import { TipoFichada } from "@/lib/supabase";
+import { TipoFichada, TipoJornada } from "@/lib/supabase";
 
 interface FichadaSuccessProps {
     tipoFichada: TipoFichada;
+    tipoJornada?: TipoJornada;
     dependenciaNombre: string;
     onVolver: () => void;
 }
 
 export default function FichadaSuccess({
     tipoFichada,
+    tipoJornada = "normal",
     dependenciaNombre,
     onVolver,
 }: FichadaSuccessProps) {
     const isEntrada = tipoFichada === "entrada";
+    const isExtra = tipoJornada === "extra";
+    const tipoLabel = isExtra
+        ? isEntrada
+            ? "Entrada de horas extras"
+            : "Salida de horas extras"
+        : isEntrada
+            ? "Entrada"
+            : "Salida";
     const fechaHora = new Date().toLocaleString("es-AR", {
         weekday: "long",
         year: "numeric",
@@ -51,7 +61,9 @@ export default function FichadaSuccess({
                             ¡Fichada Registrada!
                         </h1>
                         <p className="text-gray-600 dark:text-gray-400">
-                            Tu fichada fue procesada exitosamente
+                            {isExtra
+                                ? `${tipoLabel} registrada`
+                                : "Tu fichada fue procesada exitosamente"}
                         </p>
                     </div>
 
@@ -86,7 +98,7 @@ export default function FichadaSuccess({
                                         : "text-orange-600 dark:text-orange-400"
                                         }`}
                                 >
-                                    {isEntrada ? "Entrada" : "Salida"}
+                                    {tipoLabel}
                                 </p>
                             </div>
                         </div>

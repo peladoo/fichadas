@@ -1,8 +1,19 @@
-// Componentes del panel de administración
 export { default as StatsCards } from './StatsCards';
+export { default as StatCard } from './StatCard';
 export { default as FichadasFilters } from './FichadasFilters';
 export { default as FichadasTable } from './FichadasTable';
 export { default as FichadaModal } from './FichadaModal';
 export { default as ExportButtons } from './ExportButtons';
 export { default as DependenciasManager } from './DependenciasManager';
 export { default as ImportRelojFisico } from './ImportRelojFisico';
+export { default as AdminTabs } from './AdminTabs';
+export { default as TabJornadaNormal } from './TabJornadaNormal';
+export { default as TabHorasExtras } from './TabHorasExtras';
+export { default as TabConfiguracion } from './TabConfiguracion';
+export { default as JornadasTable } from './JornadasTable';
+export { default as ExtrasTable } from './ExtrasTable';
+export { default as ExtraModal } from './ExtraModal';
+export { default as ExtrasStatsCards } from './ExtrasStatsCards';
+export { default as ExtrasResumenTable } from './ExtrasResumenTable';
+export { default as EditRegistroModal } from './EditRegistroModal';
+export { default as PaginationBar } from './PaginationBar';

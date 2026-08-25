@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import AdminPanel from "@/components/AdminPanel";
 import AdminLogin from "@/components/AdminLogin";
 
-export default function AdminPage() {
+function AdminGate() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Verificar si hay una sesión activa al cargar
     checkUser();
 
-    // Escuchar cambios en la autenticación
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_IN' && session) {
         setIsAuthenticated(true);
@@ -30,7 +28,6 @@ export default function AdminPage() {
   const checkUser = async () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (session?.user) {
         setIsAuthenticated(true);
       }
@@ -57,4 +54,18 @@ export default function AdminPage() {
   }
 
   return isAuthenticated ? <AdminPanel /> : <AdminLogin onLoginSuccess={handleLoginSuccess} />;
+}
+
+export default function AdminPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#b6c544]"></div>
+        </div>
+      }
+    >
+      <AdminGate />
+    </Suspense>
+  );
 }
