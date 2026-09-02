@@ -21,7 +21,7 @@ export interface EstadoEmpleado {
 
 export interface ValidacionAccion {
   ok: boolean;
-  mensaje?: string;
+  alerta?: string;
 }
 
 export interface Jornada {
@@ -165,15 +165,15 @@ export const validarAccion = (
 
     if (mismoDia) {
       return {
-        ok: false,
-        mensaje: `Tenés una fichada de horas extras abierta desde las ${desde}. Primero registrá la salida de horas extras.`,
+        ok: true,
+        alerta: `Tenés una fichada de horas extras abierta desde las ${desde}. Se registrará igual.`,
       };
     }
 
     const fecha = estado.desde ? formatFechaCorta(estado.desde) : "";
     return {
-      ok: false,
-      mensaje: `Tenés una fichada de horas extras sin cerrar del ${fecha} a las ${desde}. Registrá la salida de horas extras o comunicate con RRHH.`,
+      ok: true,
+      alerta: `Tenés una fichada de horas extras sin cerrar del ${fecha} a las ${desde}. Se registrará igual.`,
     };
   }
 
@@ -184,24 +184,23 @@ export const validarAccion = (
 
     const desde = estado.desde ? formatHoraCorta(estado.desde) : "";
     return {
-      ok: false,
-      mensaje: `Tenés una entrada de jornada normal abierta desde las ${desde}. Primero registrá la salida normal.`,
+      ok: true,
+      alerta: `Tenés una entrada de jornada normal abierta desde las ${desde}. Se registrará igual.`,
     };
   }
 
-  // estado libre: no se puede marcar una salida sin entrada
   if (tipoFichada === "salida") {
     if (tipoJornada === "extra") {
       return {
-        ok: false,
-        mensaje:
-          "No tenés una entrada de horas extras abierta. Primero registrá la entrada extra.",
+        ok: true,
+        alerta:
+          "No tenés una entrada de horas extras abierta. Se registrará como entrada extra.",
       };
     }
     return {
-      ok: false,
-      mensaje:
-        "No tenés una entrada de jornada normal abierta. Primero registrá la entrada.",
+      ok: true,
+      alerta:
+        "No tenés una entrada de jornada normal abierta. Se registrará igual.",
     };
   }
 

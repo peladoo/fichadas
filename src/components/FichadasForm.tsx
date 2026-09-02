@@ -24,9 +24,13 @@ import {
   compressImage,
   logger,
 } from "@/lib/utils";
-import { getEstadoEmpleado, validarAccion } from "@/lib/jornadas";
+import {
+  getEstadoEmpleado,
+  validarAccion,
+  type EstadoEmpleado,
+} from "@/lib/jornadas";
 import { APP_VERSION } from "@/lib/version";
-import { MapPin, AlertCircle, Building2, LogIn, LogOut, Clock } from "lucide-react";
+import { MapPin, AlertCircle, AlertTriangle, Building2, LogIn, LogOut, Clock } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Tipos locales
@@ -107,6 +111,10 @@ export default function FichadasForm() {
     null,
   );
   const [error, setError] = useState("");
+  const [alerta, setAlerta] = useState("");
+  const [estadoEmpleado, setEstadoEmpleado] = useState<EstadoEmpleado | null>(
+    null,
+  );
   const [dependencia, setDependencia] = useState<Dependencia | null>(null);
   const [dependencias, setDependencias] = useState<Dependencia[]>([]);
   const [tipoFichada, setTipoFichada] = useState<TipoFichada>("entrada");
@@ -298,6 +306,46 @@ export default function FichadasForm() {
     }
   }, [location, dependencias]); // dependencia excluida intencionalmente para evitar ciclos
 
+  // Aviso si hay jornada abierta: no bloquea, solo informa
+  useEffect(() => {
+    const dniSanitizado = sanitizeDNI(documento);
+    if (!isValidDNI(dniSanitizado)) {
+      setEstadoEmpleado(null);
+      setAlerta("");
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const estado = await getEstadoEmpleado(dniSanitizado);
+        if (!cancelled && isMountedRef.current) {
+          setEstadoEmpleado(estado);
+        }
+      } catch (err) {
+        logger.error("Error consultando estado del empleado:", err);
+        if (!cancelled && isMountedRef.current) {
+          setEstadoEmpleado(null);
+          setAlerta("");
+        }
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [documento]);
+
+  useEffect(() => {
+    if (!estadoEmpleado) {
+      setAlerta("");
+      return;
+    }
+    const validacion = validarAccion(estadoEmpleado, tipoJornada, tipoFichada);
+    setAlerta(validacion.alerta || "");
+  }, [estadoEmpleado, tipoJornada, tipoFichada]);
+
   // Validar ubicación cuando cambie la dependencia seleccionada o la ubicación
   useEffect(() => {
     if (!location) {
@@ -432,10 +480,15 @@ export default function FichadasForm() {
       try {
         const estado = await getEstadoEmpleado(dniSanitizado);
         const validacion = validarAccion(estado, tipoJornada, tipoFichada);
-        if (!validacion.ok) {
-          setError(validacion.mensaje || "No se puede registrar esta fichada.");
-          return;
+        if (validacion.alerta) {
+          setAlerta(validacion.alerta);
         }
+
+        // Extra + salida sin sesión: se abre una entrada extra en vez de trabar
+        const extraComoEntrada =
+          tipoJornada === "extra" &&
+          tipoFichada === "salida" &&
+          !estado.extraAbierta;
 
         // --- Etapa 1: la compresión ya se hizo al capturar, aquí solo informamos ---
         setSubmitStage("subiendo");
@@ -444,7 +497,11 @@ export default function FichadasForm() {
         const isWebP = photoBlob.type === "image/webp";
         const ext = isWebP ? "webp" : "jpg";
         const contentType = isWebP ? "image/webp" : "image/jpeg";
-        const jornadaTag = tipoJornada === "extra" ? `extra-${tipoFichada}` : tipoFichada;
+        const tipoPersistido: TipoFichada = extraComoEntrada
+          ? "entrada"
+          : tipoFichada;
+        const jornadaTag =
+          tipoJornada === "extra" ? `extra-${tipoPersistido}` : tipoPersistido;
         const fileName = `${Date.now()}-${dniSanitizado}-${jornadaTag}.${ext}`;
 
         const { error: uploadError } = await supabase.storage
@@ -465,7 +522,7 @@ export default function FichadasForm() {
         setSubmitStage("guardando");
 
         if (tipoJornada === "extra") {
-          if (tipoFichada === "entrada") {
+          if (tipoPersistido === "entrada") {
             const extraData: FichadaExtraInsert = {
               documento: dniSanitizado,
               dependencia_id_entrada: dependencia.id,
@@ -477,22 +534,9 @@ export default function FichadasForm() {
             const { error: insertError } = await supabase
               .from("fichadas_extras")
               .insert([extraData]);
-            if (insertError) {
-              if (insertError.code === "23505") {
-                setError(
-                  "Ya tenés una fichada de horas extras abierta. Primero registrá la salida extra.",
-                );
-                return;
-              }
-              throw insertError;
-            }
+            if (insertError) throw insertError;
           } else {
-            if (!estado.extraAbierta) {
-              setError(
-                "No se encontró una fichada de horas extras abierta. Intentá de nuevo.",
-              );
-              return;
-            }
+            const extraAbierta = estado.extraAbierta;
             const cierre: FichadaExtraCierre = {
               dependencia_id_salida: dependencia.id,
               foto_url_salida: urlData.publicUrl,
@@ -504,7 +548,7 @@ export default function FichadasForm() {
             const { data: updated, error: updateError } = await supabase
               .from("fichadas_extras")
               .update(cierre)
-              .eq("id", estado.extraAbierta.id)
+              .eq("id", extraAbierta!.id)
               .is("fecha_hora_salida", null)
               .select("id");
             if (updateError) throw updateError;
@@ -519,7 +563,7 @@ export default function FichadasForm() {
           const fichadaData: FichadaInsert = {
             dependencia_id: dependencia.id,
             documento: dniSanitizado,
-            tipo: tipoFichada,
+            tipo: tipoPersistido,
             foto_url: urlData.publicUrl,
             latitud: location.lat,
             longitud: location.lng,
@@ -538,7 +582,7 @@ export default function FichadasForm() {
         if (photoPreview) URL.revokeObjectURL(photoPreview);
 
         setFichadaExitosa({
-          tipoFichada,
+          tipoFichada: tipoPersistido,
           tipoJornada,
           dependenciaNombre: dependencia.nombre,
         });
@@ -550,6 +594,8 @@ export default function FichadasForm() {
         setDependencia(null);
         setTipoFichada("entrada");
         setTipoJornada("normal");
+        setAlerta("");
+        setEstadoEmpleado(null);
       } catch (err) {
         setError(handleSupabaseError(err));
         logger.error("Error al registrar fichada:", err);
@@ -616,6 +662,14 @@ export default function FichadasForm() {
               </p>
             )}
           </div>
+
+          {/* Aviso de jornada abierta: no bloquea el registro */}
+          {alerta && (
+            <div className="bg-amber-50 border border-amber-400 text-amber-800 dark:bg-amber-900/20 dark:border-amber-500 dark:text-amber-300 px-4 py-3 rounded-lg flex items-start gap-2">
+              <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" />
+              <span>{alerta}</span>
+            </div>
+          )}
 
           {/* Error Message */}
           {error && (
