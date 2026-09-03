@@ -48,7 +48,13 @@ const formatRelojLine = (fechaHora: string, documento: string): string => {
 };
 
 export const generateTXTContent = (data: FichadaConDependencia[]): string => {
-  return data.map((f) => formatRelojLine(f.fecha_hora, f.documento)).join("\n");
+  return [...data]
+    .sort(
+      (a, b) =>
+        new Date(a.fecha_hora).getTime() - new Date(b.fecha_hora).getTime(),
+    )
+    .map((f) => formatRelojLine(f.fecha_hora, f.documento))
+    .join("\n");
 };
 
 export const generateRelojLine = formatRelojLine;

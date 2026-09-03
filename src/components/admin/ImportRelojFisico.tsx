@@ -21,6 +21,7 @@ import {
   expandDateRange,
   filterAgainstExisting,
   parseRelojText,
+  toArgentinaIso,
   unmatchedDispositivos,
   RELOJ_DEBOUNCE_MS,
   type ParsedRelojRecord,
@@ -206,8 +207,8 @@ export default function ImportRelojFisico({
 
           if (paddedRange) {
             existingQuery = existingQuery
-              .gte("fecha_hora", paddedRange.min)
-              .lte("fecha_hora", paddedRange.max);
+              .gte("fecha_hora", toArgentinaIso(paddedRange.min))
+              .lte("fecha_hora", toArgentinaIso(paddedRange.max));
           }
 
           const { data, error: fetchError } = await existingQuery.range(
@@ -236,7 +237,7 @@ export default function ImportRelojFisico({
         const batch = toInsert.slice(i, i + BATCH_SIZE).map((record) => ({
           documento: record.documento,
           tipo: record.tipo!,
-          fecha_hora: record.fecha_hora,
+          fecha_hora: toArgentinaIso(record.fecha_hora),
           dependencia_id: record.dependenciaId!,
           origen: "Reloj_Fisico",
         }));

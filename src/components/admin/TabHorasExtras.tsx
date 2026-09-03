@@ -354,7 +354,12 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
 
   const extrasToTxt = (rows: FichadaExtraConDeps[]) => {
     const lines: string[] = [];
-    for (const row of rows) {
+    const orderedRows = [...rows].sort(
+      (a, b) =>
+        new Date(a.fecha_hora_entrada).getTime() -
+        new Date(b.fecha_hora_entrada).getTime(),
+    );
+    for (const row of orderedRows) {
       if (!row.fecha_hora_salida) continue;
       lines.push(generateRelojLine(row.fecha_hora_entrada, row.documento));
       lines.push(generateRelojLine(row.fecha_hora_salida, row.documento));

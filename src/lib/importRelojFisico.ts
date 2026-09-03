@@ -77,6 +77,22 @@ export function parseFechaHoraMs(fechaHora: string): number | null {
   return Date.UTC(year, month - 1, day, hour, minute, second);
 }
 
+/** Convierte la hora de pared del reloj, que está en Argentina, a un instante. */
+export function toArgentinaIso(fechaHora: string): string {
+  const normalized = fechaHora.trim().replace(" ", "T");
+  return `${normalized}-03:00`;
+}
+
+function parseInstantMs(fechaHora: string): number | null {
+  const value = fechaHora.trim();
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(value)) {
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  const parsed = Date.parse(toArgentinaIso(value));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
 function pad2(value: number | string): string {
   return String(value).padStart(2, "0");
 }
@@ -427,21 +443,8 @@ export function classifyRecords(records: ParsedRelojRecord[]) {
   return { valid, invalid, debounced };
 }
 
-function existingKey(documento: string, fechaHora: string, tipo: string) {
-  return `${documento}|${fechaHora}|${tipo}`;
-}
-
-function normalizeExistingFechaHora(fechaHora: string): string {
-  const trimmed = fechaHora.trim().replace("T", " ");
-  const match = trimmed.match(DATETIME_RE);
-  if (match) {
-    return `${match[1]}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
-  }
-  const noMs = trimmed.match(
-    /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})/,
-  );
-  if (noMs) return `${noMs[1]} ${noMs[2]}`;
-  return trimmed.slice(0, 19);
+function existingKey(documento: string, fechaHoraMs: number, tipo: string) {
+  return `${documento}|${fechaHoraMs}|${tipo}`;
 }
 
 export function filterAgainstExisting(
@@ -450,18 +453,15 @@ export function filterAgainstExisting(
   windowMs: number = RELOJ_DEBOUNCE_MS,
 ): { toInsert: ParsedRelojRecord[]; duplicados: number } {
   const existingKeys = new Set(
-    existing.map((f) =>
-      existingKey(
-        f.documento,
-        normalizeExistingFechaHora(f.fecha_hora),
-        f.tipo,
-      ),
-    ),
+    existing
+      .map((f) => ({ ...f, ms: parseInstantMs(f.fecha_hora) }))
+      .filter((f) => f.ms !== null)
+      .map((f) => existingKey(f.documento, f.ms!, f.tipo)),
   );
 
   const existingTimes = new Map<string, number[]>();
   for (const f of existing) {
-    const ms = parseFechaHoraMs(normalizeExistingFechaHora(f.fecha_hora));
+    const ms = parseInstantMs(f.fecha_hora);
     if (ms === null) continue;
     const key = `${f.documento}|${f.tipo}`;
     const list = existingTimes.get(key);
@@ -477,13 +477,18 @@ export function filterAgainstExisting(
       duplicados++;
       continue;
     }
-    const key = existingKey(record.documento, record.fecha_hora, record.tipo);
+    const t = parseInstantMs(record.fecha_hora);
+    if (t === null) {
+      duplicados++;
+      continue;
+    }
+    const key = existingKey(record.documento, t, record.tipo);
     if (existingKeys.has(key)) {
       duplicados++;
       continue;
     }
 
-    const t = parseFechaHoraMs(record.fecha_hora);
+
     const times = existingTimes.get(`${record.documento}|${record.tipo}`) || [];
     const near = t !== null && times.some((other) => Math.abs(t - other) < windowMs);
     if (near) {
