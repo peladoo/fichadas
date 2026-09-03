@@ -12,14 +12,20 @@ import {
   LogOut,
 } from "lucide-react";
 import { supabase, type Dependencia } from "@/lib/supabase";
-import { isValidDNI, logger } from "@/lib/utils";
-
-interface ParsedRecord {
-  fecha_hora: string; // YYYY-MM-DD HH:MM:00
-  documento: string;
-  lineaOriginal: string;
-  error?: string;
-}
+import { logger } from "@/lib/utils";
+import {
+  attachDependencias,
+  classifyRecords,
+  dateRangeOf,
+  debounceRecords,
+  expandDateRange,
+  filterAgainstExisting,
+  parseRelojText,
+  unmatchedDispositivos,
+  RELOJ_DEBOUNCE_MS,
+  type ParsedRelojRecord,
+  type RelojFileFormat,
+} from "@/lib/importRelojFisico";
 
 interface ImportResult {
   insertados: number;
@@ -33,26 +39,20 @@ interface ImportRelojFisicoProps {
   onImportComplete: () => void;
 }
 
-/**
- * Importa fichadas desde archivo de reloj físico.
- * Formato esperado (separado por espacios o tabs):
- *   DNI  DD  MM  YYYY  HH  MM
- * Ejemplo:
- *   39683817  05 11 2025 07 18
- */
 export default function ImportRelojFisico({
   dependencias,
   onImportComplete,
 }: ImportRelojFisicoProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [parsedRecords, setParsedRecords] = useState<ParsedRecord[]>([]);
-  const [invalidRecords, setInvalidRecords] = useState<ParsedRecord[]>([]);
+  const [format, setFormat] = useState<RelojFileFormat | null>(null);
+  const [parsedRecords, setParsedRecords] = useState<ParsedRelojRecord[]>([]);
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [result, setResult] = useState<ImportResult | null>(null);
   const [parseError, setParseError] = useState("");
   const [dependenciaId, setDependenciaId] = useState<string>("");
+  const [fallbackDependenciaId, setFallbackDependenciaId] = useState<string>("");
   const [tipo, setTipo] = useState<"entrada" | "salida">("entrada");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -61,96 +61,67 @@ export default function ImportRelojFisico({
     [dependencias, dependenciaId],
   );
 
+  const processedRecords = useMemo(() => {
+    if (parsedRecords.length === 0) return [];
+    if (format === "tsv") {
+      return debounceRecords(attachDependencias(parsedRecords, dependencias));
+    }
+    return debounceRecords(
+      parsedRecords.map((r) => (r.error ? r : { ...r, tipo })),
+    );
+  }, [parsedRecords, dependencias, format, tipo]);
+
+  const { valid, invalid, debounced } = useMemo(
+    () => classifyRecords(processedRecords),
+    [processedRecords],
+  );
+
+  const dispositivosSinMatch = useMemo(
+    () => unmatchedDispositivos(processedRecords),
+    [processedRecords],
+  );
+
+  const recordsConFallback = useMemo(
+    () =>
+      processedRecords.map((record) =>
+        record.dependenciaSinMatch && fallbackDependenciaId
+          ? {
+              ...record,
+              dependenciaId: fallbackDependenciaId,
+              dependenciaNombre: "Dependencia fallback",
+            }
+          : record,
+      ),
+    [processedRecords, fallbackDependenciaId],
+  );
+
+  const validosConFallback = useMemo(
+    () => classifyRecords(recordsConFallback).valid,
+    [recordsConFallback],
+  );
+
   const parseFile = (text: string) => {
     setParseError("");
     setResult(null);
 
-    const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
-
-    if (lines.length === 0) {
+    if (!text.trim()) {
       setParseError("El archivo está vacío.");
+      setParsedRecords([]);
+      setFormat(null);
       return;
     }
 
-    const valid: ParsedRecord[] = [];
-    const invalid: ParsedRecord[] = [];
+    const { format: detected, records } = parseRelojText(text);
+    setFormat(detected);
+    setParsedRecords(records);
 
-    for (const line of lines) {
-      // Split por cualquier whitespace (espacios múltiples, tabs, etc.)
-      const tokens = line.trim().split(/\s+/);
-
-      // Formato esperado: DNI DD MM YYYY HH MM (6 tokens)
-      if (tokens.length !== 6) {
-        invalid.push({
-          fecha_hora: "",
-          documento: tokens[0] || "",
-          lineaOriginal: line,
-          error: `Se esperaban 6 valores (DNI DD MM YYYY HH MM), se encontraron ${tokens.length}`,
-        });
-        continue;
-      }
-
-      const [dni, dd, mm, yyyy, hh, min] = tokens;
-
-      // Validar DNI (7 u 8 dígitos)
-      if (!isValidDNI(dni)) {
-        invalid.push({
-          fecha_hora: "",
-          documento: dni,
-          lineaOriginal: line,
-          error: "DNI inválido (debe tener 7 u 8 dígitos)",
-        });
-        continue;
-      }
-
-      // Validar componentes de fecha
-      const day = parseInt(dd, 10);
-      const month = parseInt(mm, 10);
-      const year = parseInt(yyyy, 10);
-      const hour = parseInt(hh, 10);
-      const minute = parseInt(min, 10);
-
-      const fechaValida =
-        !isNaN(day) &&
-        day >= 1 &&
-        day <= 31 &&
-        !isNaN(month) &&
-        month >= 1 &&
-        month <= 12 &&
-        !isNaN(year) &&
-        year >= 2000 &&
-        year <= 2100 &&
-        !isNaN(hour) &&
-        hour >= 0 &&
-        hour <= 23 &&
-        !isNaN(minute) &&
-        minute >= 0 &&
-        minute <= 59;
-
-      if (!fechaValida) {
-        invalid.push({
-          fecha_hora: "",
-          documento: dni,
-          lineaOriginal: line,
-          error: "Fecha u hora inválida",
-        });
-        continue;
-      }
-
-      // Construir fecha_hora en formato ISO sin zona (PostgreSQL timestamp)
-      const fecha_hora = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")} ${hh.padStart(2, "0")}:${min.padStart(2, "0")}:00`;
-
-      valid.push({
-        fecha_hora,
-        documento: dni,
-        lineaOriginal: line,
-      });
+    if (records.length === 0) {
+      setParseError("Ninguna línea pudo ser parseada. Verificá el formato del archivo.");
+      return;
     }
 
-    setParsedRecords(valid);
-    setInvalidRecords(invalid);
-
-    if (valid.length === 0 && invalid.length > 0) {
+    const allInvalid = records.every((r) => r.error);
+    if (allInvalid) {
       setParseError(
         "Ninguna línea pudo ser parseada. Verificá el formato del archivo.",
       );
@@ -164,7 +135,7 @@ export default function ImportRelojFisico({
     setFile(selectedFile);
     setResult(null);
     setParsedRecords([]);
-    setInvalidRecords([]);
+    setFormat(null);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -175,15 +146,31 @@ export default function ImportRelojFisico({
   };
 
   const handleImport = async () => {
-    if (parsedRecords.length === 0) return;
-    if (!dependenciaId) {
+    const isTsv = format === "tsv";
+    const ready = isTsv
+      ? validosConFallback
+      : valid.map((r) => ({
+          ...r,
+          tipo,
+          dependenciaId,
+          dependenciaNombre: dependenciaSeleccionada?.nombre,
+        }));
+
+    if (ready.length === 0) return;
+    if (!isTsv && !dependenciaId) {
       setParseError("Seleccioná una dependencia antes de importar.");
+      return;
+    }
+
+    const missingDep = ready.some((r) => !r.dependenciaId || !r.tipo);
+    if (missingDep) {
+      setParseError("Falta dependencia o tipo en uno o más registros.");
       return;
     }
 
     setImporting(true);
     setResult(null);
-    setProgress({ current: 0, total: parsedRecords.length });
+    setProgress({ current: 0, total: ready.length });
 
     const importResult: ImportResult = {
       insertados: 0,
@@ -193,61 +180,67 @@ export default function ImportRelojFisico({
     };
 
     try {
-      // 1. Buscar duplicados existentes en batch (mucho más eficiente que 1 query por registro)
-      const documentosUnicos = [
-        ...new Set(parsedRecords.map((r) => r.documento)),
-      ];
-      const fechasUnicas = [...new Set(parsedRecords.map((r) => r.fecha_hora))];
+      const documentosUnicos = [...new Set(ready.map((r) => r.documento))];
+      const range = dateRangeOf(ready);
+      const paddedRange = range
+        ? expandDateRange(range, RELOJ_DEBOUNCE_MS)
+        : null;
 
-      // Buscar todas las fichadas existentes que coincidan con algún DNI y fecha del archivo
-      const { data: existingFichadas, error: fetchError } = await supabase
-        .from("fichadas")
-        .select("documento, fecha_hora, tipo")
-        .in("documento", documentosUnicos)
-        .in("fecha_hora", fechasUnicas);
-
-      if (fetchError) throw fetchError;
-
-      // Construir set de claves existentes para lookup O(1)
-      const existingKeys = new Set(
-        (existingFichadas || []).map(
-          (f) => `${f.documento}|${f.fecha_hora}|${f.tipo}`,
-        ),
-      );
-
-      // 2. Filtrar duplicados y preparar inserts
-      const toInsert: Array<{
+      const existingFichadas: {
         documento: string;
-        tipo: "entrada" | "salida";
         fecha_hora: string;
-        dependencia_id: string;
-        origen: string;
-      }> = [];
+        tipo: string;
+      }[] = [];
+      const DOC_CHUNK = 100;
+      const PAGE_SIZE = 1000;
 
-      for (const record of parsedRecords) {
-        const key = `${record.documento}|${record.fecha_hora}|${tipo}`;
-        if (existingKeys.has(key)) {
-          importResult.duplicados++;
-        } else {
-          toInsert.push({
-            documento: record.documento,
-            tipo,
-            fecha_hora: record.fecha_hora,
-            dependencia_id: dependenciaId,
-            origen: "Reloj_Fisico",
-          });
-          // Agregar al set para detectar duplicados dentro del mismo archivo
-          existingKeys.add(key);
+      for (let d = 0; d < documentosUnicos.length; d += DOC_CHUNK) {
+        const docs = documentosUnicos.slice(d, d + DOC_CHUNK);
+        let offset = 0;
+        let hasMore = true;
+        while (hasMore) {
+          let existingQuery = supabase
+            .from("fichadas")
+            .select("documento, fecha_hora, tipo")
+            .in("documento", docs);
+
+          if (paddedRange) {
+            existingQuery = existingQuery
+              .gte("fecha_hora", paddedRange.min)
+              .lte("fecha_hora", paddedRange.max);
+          }
+
+          const { data, error: fetchError } = await existingQuery.range(
+            offset,
+            offset + PAGE_SIZE - 1,
+          );
+          if (fetchError) throw fetchError;
+          if (!data || data.length === 0) {
+            hasMore = false;
+          } else {
+            existingFichadas.push(...data);
+            offset += PAGE_SIZE;
+            if (data.length < PAGE_SIZE) hasMore = false;
+          }
         }
       }
 
-      // 3. Insertar en batches de 100
+      const { toInsert, duplicados } = filterAgainstExisting(
+        ready as ParsedRelojRecord[],
+        existingFichadas || [],
+      );
+      importResult.duplicados = duplicados;
+
       const BATCH_SIZE = 100;
       for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
-        const batch = toInsert.slice(i, i + BATCH_SIZE);
-        const { error: insertError } = await supabase
-          .from("fichadas")
-          .insert(batch);
+        const batch = toInsert.slice(i, i + BATCH_SIZE).map((record) => ({
+          documento: record.documento,
+          tipo: record.tipo!,
+          fecha_hora: record.fecha_hora,
+          dependencia_id: record.dependenciaId!,
+          origen: "Reloj_Fisico",
+        }));
+        const { error: insertError } = await supabase.from("fichadas").insert(batch);
 
         if (insertError) {
           importResult.errores += batch.length;
@@ -269,9 +262,7 @@ export default function ImportRelojFisico({
     } catch (err) {
       logger.error("Error en importación:", err);
       importResult.errores =
-        parsedRecords.length -
-        importResult.insertados -
-        importResult.duplicados;
+        ready.length - importResult.insertados - importResult.duplicados;
       importResult.detallesErrores.push(
         `Error general: ${err instanceof Error ? err.message : "desconocido"}`,
       );
@@ -288,7 +279,8 @@ export default function ImportRelojFisico({
   const resetForm = () => {
     setFile(null);
     setParsedRecords([]);
-    setInvalidRecords([]);
+    setFormat(null);
+    setFallbackDependenciaId("");
     setResult(null);
     setParseError("");
     setProgress({ current: 0, total: 0 });
@@ -297,7 +289,12 @@ export default function ImportRelojFisico({
     }
   };
 
-  const validRecords = parsedRecords;
+  const canImport =
+    valid.length > 0 &&
+    !importing &&
+    (format === "legacy"
+      ? Boolean(dependenciaId)
+      : dispositivosSinMatch.length === 0 || Boolean(fallbackDependenciaId));
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 mb-6">
@@ -314,8 +311,8 @@ export default function ImportRelojFisico({
               Importar Reloj Físico
             </h2>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Subir archivo .txt del reloj biométrico (formato: DNI DD MM YYYY
-              HH MM)
+              Subir archivo .txt del reloj (Eventos de hoy) o formato legado DNI
+              DD MM YYYY HH MM
             </p>
           </div>
         </div>
@@ -336,7 +333,6 @@ export default function ImportRelojFisico({
 
       {isOpen && (
         <div className="mt-6 space-y-4">
-          {/* File input */}
           <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-6 text-center hover:border-indigo-400 transition-colors">
             <input
               ref={fileInputRef}
@@ -361,69 +357,179 @@ export default function ImportRelojFisico({
                     Haga clic para seleccionar archivo .txt
                   </span>
                   <span className="text-xs text-gray-500">
-                    Una fichada por línea — formato: DNI DD MM YYYY HH MM
+                    Export TSV del reloj o una fichada por línea: DNI DD MM YYYY
+                    HH MM
                   </span>
                 </>
               )}
             </label>
           </div>
 
-          {/* Parse error */}
           {parseError && (
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-2">
               <XCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700 dark:text-red-400">
-                {parseError}
-              </p>
+              <p className="text-sm text-red-700 dark:text-red-400">{parseError}</p>
             </div>
           )}
 
-          {/* Preview */}
-          {(parsedRecords.length > 0 || invalidRecords.length > 0) &&
-            !result && (
-              <div className="space-y-4">
+          {(processedRecords.length > 0 || invalid.length > 0) && !result && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                   Vista previa del archivo
                 </h3>
+                {format && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300">
+                    {format === "tsv" ? "Formato Eventos de hoy (TSV)" : "Formato legado"}
+                  </span>
+                )}
+              </div>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-green-600">
-                      {validRecords.length}
-                    </p>
-                    <p className="text-xs text-green-700 dark:text-green-400">
-                      Válidos
-                    </p>
-                  </div>
-                  <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-red-600">
-                      {invalidRecords.length}
-                    </p>
-                    <p className="text-xs text-red-700 dark:text-red-400">
-                      Inválidos
-                    </p>
-                  </div>
-                  <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
-                    <p className="text-2xl font-bold text-blue-600">
-                      {parsedRecords.length + invalidRecords.length}
-                    </p>
-                    <p className="text-xs text-blue-700 dark:text-blue-400">
-                      Total líneas
-                    </p>
-                  </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-green-600">{valid.length}</p>
+                  <p className="text-xs text-green-700 dark:text-green-400">Válidos</p>
                 </div>
+                <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {debounced.length}
+                  </p>
+                  <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                    Debounce 30s
+                  </p>
+                </div>
+                <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-red-600">{invalid.length}</p>
+                  <p className="text-xs text-red-700 dark:text-red-400">Inválidos</p>
+                </div>
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">
+                    {processedRecords.length}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400">
+                    Total líneas
+                  </p>
+                </div>
+              </div>
 
-                {/* Selector de Dependencia */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Dependencia del reloj físico{" "}
-                    <span className="text-red-500">*</span>
+              {format === "legacy" && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Dependencia del reloj físico{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={dependenciaId}
+                      onChange={(e) => setDependenciaId(e.target.value)}
+                      disabled={importing}
+                      className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                    >
+                      <option value="">Seleccioná una dependencia...</option>
+                      {dependencias.map((dep) => (
+                        <option key={dep.id} value={dep.id}>
+                          {dep.nombre}
+                        </option>
+                      ))}
+                    </select>
+                    {dependenciaSeleccionada && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Todas las fichadas se asignarán a:{" "}
+                        <strong>{dependenciaSeleccionada.nombre}</strong>
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Tipo de fichadas en este archivo{" "}
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setTipo("entrada")}
+                        disabled={importing}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition ${
+                          tipo === "entrada"
+                            ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:border-green-500 dark:text-green-400"
+                            : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
+                        }`}
+                      >
+                        <LogIn className="w-4 h-4" />
+                        <span className="font-semibold text-sm">Entrada</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipo("salida")}
+                        disabled={importing}
+                        className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition ${
+                          tipo === "salida"
+                            ? "bg-orange-50 border-orange-500 text-orange-700 dark:bg-orange-900/20 dark:border-orange-500 dark:text-orange-400"
+                            : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
+                        }`}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span className="font-semibold text-sm">Salida</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {format === "tsv" && valid.length > 0 && (
+                <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                  <div className="max-h-48 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+                        <tr className="text-left text-gray-600 dark:text-gray-300">
+                          <th className="px-2 py-1.5 font-medium">DNI</th>
+                          <th className="px-2 py-1.5 font-medium">Fecha/hora</th>
+                          <th className="px-2 py-1.5 font-medium">Tipo</th>
+                          <th className="px-2 py-1.5 font-medium">Dependencia</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {valid.slice(0, 20).map((r, i) => (
+                          <tr key={i} className="text-gray-800 dark:text-gray-200">
+                            <td className="px-2 py-1 font-mono">{r.documento}</td>
+                            <td className="px-2 py-1 font-mono">{r.fecha_hora}</td>
+                            <td className="px-2 py-1 capitalize">{r.tipo}</td>
+                            <td className="px-2 py-1">
+                              {r.dependenciaNombre || r.dispositivo}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {valid.length > 20 && (
+                    <p className="text-xs text-gray-500 px-2 py-1.5 bg-gray-50 dark:bg-gray-700/50">
+                      Mostrando 20 de {valid.length} registros válidos
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {dispositivosSinMatch.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-300 mb-2 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    Dispositivos sin dependencia (creá o renombrá en el panel):
+                  </p>
+                  <ul className="text-xs text-amber-800 dark:text-amber-400 space-y-1 font-mono">
+                    {dispositivosSinMatch.map((name) => (
+                      <li key={name}>• {name}</li>
+                    ))}
+                  </ul>
+                  <label className="block text-sm font-medium text-amber-900 dark:text-amber-200 mt-3 mb-1">
+                    Dependencia para dispositivos sin match
                   </label>
                   <select
-                    value={dependenciaId}
-                    onChange={(e) => setDependenciaId(e.target.value)}
+                    value={fallbackDependenciaId}
+                    onChange={(e) => setFallbackDependenciaId(e.target.value)}
                     disabled={importing}
-                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
+                    className="w-full px-3 py-2 border border-amber-300 dark:border-amber-700 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-white text-sm"
                   >
                     <option value="">Seleccioná una dependencia...</option>
                     {dependencias.map((dep) => (
@@ -432,123 +538,79 @@ export default function ImportRelojFisico({
                       </option>
                     ))}
                   </select>
-                  {dependenciaSeleccionada && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Todas las fichadas se asignarán a:{" "}
-                      <strong>{dependenciaSeleccionada.nombre}</strong>
-                    </p>
-                  )}
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                    Las filas se cargarán igualmente usando esta dependencia.
+                  </p>
                 </div>
+              )}
 
-                {/* Selector de Tipo */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Tipo de fichadas en este archivo{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setTipo("entrada")}
-                      disabled={importing}
-                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition ${
-                        tipo === "entrada"
-                          ? "bg-green-50 border-green-500 text-green-700 dark:bg-green-900/20 dark:border-green-500 dark:text-green-400"
-                          : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
-                      }`}
-                    >
-                      <LogIn className="w-4 h-4" />
-                      <span className="font-semibold text-sm">Entrada</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTipo("salida")}
-                      disabled={importing}
-                      className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition ${
-                        tipo === "salida"
-                          ? "bg-orange-50 border-orange-500 text-orange-700 dark:bg-orange-900/20 dark:border-orange-500 dark:text-orange-400"
-                          : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
-                      }`}
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span className="font-semibold text-sm">Salida</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Líneas inválidas */}
-                {invalidRecords.length > 0 && (
-                  <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                    <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-2 flex items-center gap-1">
-                      <AlertTriangle className="w-4 h-4" />
-                      Líneas inválidas (no se importarán):
-                    </p>
-                    <ul className="text-xs text-red-700 dark:text-red-400 space-y-1 max-h-32 overflow-y-auto font-mono">
-                      {invalidRecords.slice(0, 10).map((r, i) => (
-                        <li key={i}>
-                          <span className="font-semibold">{r.error}:</span>{" "}
-                          {r.lineaOriginal}
-                        </li>
-                      ))}
-                      {invalidRecords.length > 10 && (
-                        <li className="italic font-sans">
-                          ... y {invalidRecords.length - 10} más
-                        </li>
-                      )}
-                    </ul>
-                  </div>
-                )}
-
-                {/* Barra de progreso */}
-                {importing && progress.total > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
-                      <span>Insertando fichadas...</span>
-                      <span>
-                        {progress.current} / {progress.total}
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div
-                        className="bg-indigo-600 h-2 rounded-full transition-all"
-                        style={{
-                          width: `${(progress.current / progress.total) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Botones de acción */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={handleImport}
-                    disabled={
-                      validRecords.length === 0 || importing || !dependenciaId
-                    }
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-5 py-2.5 rounded-lg transition shadow-lg hover:shadow-xl text-sm font-medium"
-                  >
-                    {importing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Upload className="w-4 h-4" />
+              {invalid.length > 0 && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                  <p className="text-sm font-medium text-red-800 dark:text-red-300 mb-2 flex items-center gap-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    Líneas inválidas (no se importarán):
+                  </p>
+                  <ul className="text-xs text-red-700 dark:text-red-400 space-y-1 max-h-32 overflow-y-auto font-mono">
+                    {invalid.slice(0, 10).map((r, i) => (
+                      <li key={i}>
+                        <span className="font-semibold">{r.error}:</span>{" "}
+                        {r.documento || r.lineaOriginal.slice(0, 80)}
+                      </li>
+                    ))}
+                    {invalid.length > 10 && (
+                      <li className="italic font-sans">
+                        ... y {invalid.length - 10} más
+                      </li>
                     )}
-                    {importing
-                      ? "Importando..."
-                      : `Importar ${validRecords.length} registros`}
-                  </button>
-                  <button
-                    onClick={resetForm}
-                    disabled={importing}
-                    className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg transition text-sm"
-                  >
-                    Cancelar
-                  </button>
+                  </ul>
                 </div>
-              </div>
-            )}
+              )}
 
-          {/* Resultado de importación */}
+              {importing && progress.total > 0 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400">
+                    <span>Insertando fichadas...</span>
+                    <span>
+                      {progress.current} / {progress.total}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-indigo-600 h-2 rounded-full transition-all"
+                      style={{
+                        width: `${(progress.current / progress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleImport}
+                  disabled={!canImport}
+                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white px-5 py-2.5 rounded-lg transition shadow-lg hover:shadow-xl text-sm font-medium"
+                >
+                  {importing ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Upload className="w-4 h-4" />
+                  )}
+                  {importing
+                    ? "Importando..."
+                    : `Importar ${validosConFallback.length} registros`}
+                </button>
+                <button
+                  onClick={resetForm}
+                  disabled={importing}
+                  className="flex items-center gap-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg transition text-sm"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
           {result && (
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -582,12 +644,8 @@ export default function ImportRelojFisico({
                   <div className="flex items-center justify-center gap-1 mb-1">
                     <XCircle className="w-4 h-4 text-red-600" />
                   </div>
-                  <p className="text-2xl font-bold text-red-600">
-                    {result.errores}
-                  </p>
-                  <p className="text-xs text-red-700 dark:text-red-400">
-                    Errores
-                  </p>
+                  <p className="text-2xl font-bold text-red-600">{result.errores}</p>
+                  <p className="text-xs text-red-700 dark:text-red-400">Errores</p>
                 </div>
               </div>
 
@@ -613,7 +671,6 @@ export default function ImportRelojFisico({
             </div>
           )}
 
-          {/* Importing progress */}
           {importing && (
             <div className="flex items-center gap-2 text-sm text-indigo-600 dark:text-indigo-400">
               <Loader2 className="w-4 h-4 animate-spin" />
