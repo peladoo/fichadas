@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fichadas Municipalidad",
-  description: "Sistema de registro de fichadas para la Municipalidad de San Benito",
+  title: "Fichadas municipales",
+  description: "Sistema de registro de fichadas con GPS y foto para municipios",
   manifest: "/manifest.json",
   icons: {
     icon: [

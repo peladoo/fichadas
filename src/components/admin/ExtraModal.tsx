@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { FichadaExtraConDeps } from "@/lib/supabase";
 import { evaluarExtra, formatHoras } from "@/lib/jornadas";
+import FotoImg, { FotoDownloadLink } from "@/components/FotoImg";
 
 interface ExtraModalProps {
   extra: FichadaExtraConDeps | null;
@@ -155,21 +156,17 @@ export default function ExtraModal({ extra, onClose }: ExtraModalProps) {
                   <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
                     Foto entrada
                   </h4>
-                  <a
-                    href={extra.foto_url_entrada}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <FotoDownloadLink
+                    path={extra.foto_url_entrada!}
                     className="flex items-center gap-2 text-sm text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] font-medium"
                   >
                     <Download className="w-4 h-4" />
                     Descargar
-                  </a>
+                  </FotoDownloadLink>
                 </div>
                 <div className="overflow-hidden rounded-2xl border-4 border-gray-200 dark:border-gray-700 shadow-lg">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={extra.foto_url_entrada}
+                  <FotoImg
+                    path={extra.foto_url_entrada}
                     alt="Foto de entrada"
                     className="w-full h-auto object-contain max-h-[360px]"
                   />
@@ -182,21 +179,17 @@ export default function ExtraModal({ extra, onClose }: ExtraModalProps) {
                   <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
                     Foto salida
                   </h4>
-                  <a
-                    href={extra.foto_url_salida}
-                    download
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <FotoDownloadLink
+                    path={extra.foto_url_salida!}
                     className="flex items-center gap-2 text-sm text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] font-medium"
                   >
                     <Download className="w-4 h-4" />
                     Descargar
-                  </a>
+                  </FotoDownloadLink>
                 </div>
                 <div className="overflow-hidden rounded-2xl border-4 border-gray-200 dark:border-gray-700 shadow-lg">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={extra.foto_url_salida}
+                  <FotoImg
+                    path={extra.foto_url_salida}
                     alt="Foto de salida"
                     className="w-full h-auto object-contain max-h-[360px]"
                   />

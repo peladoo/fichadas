@@ -1,13 +1,13 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "placeholder";
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Tipos para las tablas
 export interface Dependencia {
   id: string;
+  municipio_id: string;
   nombre: string;
   codigo: string;
   direccion?: string;
@@ -17,11 +17,12 @@ export interface Dependencia {
   created_at: string;
 }
 
-export type TipoFichada = 'entrada' | 'salida';
-export type TipoJornada = 'normal' | 'extra';
+export type TipoFichada = "entrada" | "salida";
+export type TipoJornada = "normal" | "extra";
 
 export interface Fichada {
   id: string;
+  municipio_id: string;
   dependencia_id: string;
   documento: string;
   tipo: TipoFichada;
@@ -37,6 +38,7 @@ export interface Fichada {
 }
 
 export interface FichadaInsert {
+  municipio_id: string;
   dependencia_id: string;
   documento: string;
   tipo: TipoFichada;
@@ -49,6 +51,7 @@ export interface FichadaInsert {
 
 export interface FichadaExtra {
   id: string;
+  municipio_id: string;
   documento: string;
   dependencia_id_entrada?: string | null;
   foto_url_entrada?: string | null;
@@ -68,6 +71,7 @@ export interface FichadaExtra {
 }
 
 export interface FichadaExtraInsert {
+  municipio_id: string;
   documento: string;
   dependencia_id_entrada: string;
   foto_url_entrada?: string;
@@ -92,4 +96,9 @@ export interface FichadaConDependencia extends Fichada {
 export interface FichadaExtraConDeps extends FichadaExtra {
   dependenciaEntrada?: Dependencia;
   dependenciaSalida?: Dependencia;
+}
+
+export interface EstadoFichadasRpc {
+  extra_abierta: FichadaExtra | null;
+  ultima_fichada: Fichada | null;
 }

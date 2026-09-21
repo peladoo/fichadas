@@ -1,12 +1,13 @@
 @import "tailwindcss";
 
-/* Tema Light - Municipalidad de San Benito */
+/* Tema Light - Fichadas municipales */
 :root {
   --background: #ffffff;
   --foreground: #4d4d4d;
+  --muni-primary: #b6c544;
   
   /* Paleta Municipal */
-  --color-primary: #b6c544;
+  --color-primary: var(--muni-primary);
   --color-primary-content: #1a1a1a;
   --color-secondary: #fbd300;
   --color-secondary-content: #4d4d4d;

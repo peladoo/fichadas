@@ -16,8 +16,10 @@ interface FichadaReciente {
     mensaje: string;
 }
 
-export function useFichadas(options: UseFichadasOptions = {}) {
-    const { minutosMinimoEntreFichadas = 5 } = options;
+export function useFichadas(
+    options: UseFichadasOptions & { municipioId: string },
+) {
+    const { minutosMinimoEntreFichadas = 5, municipioId } = options;
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -50,6 +52,7 @@ export function useFichadas(options: UseFichadasOptions = {}) {
                 const { data, error: queryError } = await supabase
                     .from("fichadas")
                     .select("*")
+                    .eq("municipio_id", municipioId)
                     .eq("documento", dni)
                     .gte("fecha_hora", tiempoLimite)
                     .order("fecha_hora", { ascending: false })
@@ -99,7 +102,7 @@ export function useFichadas(options: UseFichadasOptions = {}) {
                 setLoading(false);
             }
         },
-        [minutosMinimoEntreFichadas]
+        [minutosMinimoEntreFichadas, municipioId]
     );
 
     /**

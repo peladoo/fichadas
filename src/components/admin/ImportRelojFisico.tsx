@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { supabase, type Dependencia } from "@/lib/supabase";
 import { logger } from "@/lib/utils";
+import { useMunicipio } from "@/components/MunicipioProvider";
 import {
   attachDependencias,
   classifyRecords,
@@ -44,6 +45,7 @@ export default function ImportRelojFisico({
   dependencias,
   onImportComplete,
 }: ImportRelojFisicoProps) {
+  const municipio = useMunicipio();
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [format, setFormat] = useState<RelojFileFormat | null>(null);
@@ -203,6 +205,7 @@ export default function ImportRelojFisico({
           let existingQuery = supabase
             .from("fichadas")
             .select("documento, fecha_hora, tipo")
+            .eq("municipio_id", municipio.id)
             .in("documento", docs);
 
           if (paddedRange) {
@@ -235,6 +238,7 @@ export default function ImportRelojFisico({
       const BATCH_SIZE = 100;
       for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
         const batch = toInsert.slice(i, i + BATCH_SIZE).map((record) => ({
+          municipio_id: municipio.id,
           documento: record.documento,
           tipo: record.tipo!,
           fecha_hora: toArgentinaIso(record.fecha_hora),

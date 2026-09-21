@@ -29,6 +29,7 @@ import {
   sumarHoras,
 } from "@/lib/jornadas";
 import { AlertCircle, Plus } from "lucide-react";
+import { useMunicipio } from "@/components/MunicipioProvider";
 import FichadasFilters from "./FichadasFilters";
 import ExportButtons, { type ExportAction } from "./ExportButtons";
 import PaginationBar, { PAGE_SIZE_OPTIONS } from "./PaginationBar";
@@ -52,6 +53,7 @@ interface TabHorasExtrasProps {
 }
 
 export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
+  const municipio = useMunicipio();
   const [extras, setExtras] = useState<FichadaExtraConDeps[]>([]);
   const [displayExtras, setDisplayExtras] = useState<FichadaExtraConDeps[]>([]);
   const [dependencias, setDependencias] = useState<Dependencia[]>([]);
@@ -132,7 +134,10 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
     let offset = 0;
     let hasMore = true;
     while (hasMore) {
-      const baseQuery = supabase.from("fichadas_extras").select("*");
+      const baseQuery = supabase
+        .from("fichadas_extras")
+        .select("*")
+        .eq("municipio_id", municipio.id);
       const { data, error: fetchError } = await buildFilteredQuery(baseQuery)
         .order("fecha_hora_entrada", { ascending: false })
         .range(offset, offset + EXPORT_BATCH_SIZE - 1);
@@ -156,6 +161,7 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
     let kpiQuery = supabase
       .from("fichadas_extras")
       .select("*")
+      .eq("municipio_id", municipio.id)
       .gte("fecha_hora_entrada", `${desdeKpi}T00:00:00`);
     if (depsFilter) {
       kpiQuery = kpiQuery.or(
@@ -183,6 +189,7 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
     let abiertasQuery = supabase
       .from("fichadas_extras")
       .select("id", { count: "exact", head: true })
+      .eq("municipio_id", municipio.id)
       .is("fecha_hora_salida", null);
     if (depsFilter) {
       abiertasQuery = abiertasQuery.or(
@@ -200,6 +207,7 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
       const { data: depData, error: depError } = await supabase
         .from("dependencias")
         .select("*")
+        .eq("municipio_id", municipio.id)
         .order("nombre");
       if (depError) throw depError;
       setDependencias(depData || []);
@@ -215,7 +223,8 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
         const to = from + itemsPerPage - 1;
         const baseQuery = supabase
           .from("fichadas_extras")
-          .select("*", { count: "exact" });
+          .select("*", { count: "exact" })
+          .eq("municipio_id", municipio.id);
         const {
           data,
           error: extrasError,
@@ -244,6 +253,7 @@ export default function TabHorasExtras({ refreshKey }: TabHorasExtrasProps) {
     selectedTipo,
     fechaDesde,
     fechaHasta,
+    municipio.id,
   ]);
 
   useEffect(() => {

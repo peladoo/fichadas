@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { supabase, type Dependencia } from "@/lib/supabase";
 import { handleSupabaseError, logger } from "@/lib/utils";
+import { useMunicipio } from "@/components/MunicipioProvider";
 
 interface DependenciaFormData {
     id?: string;
@@ -45,6 +46,7 @@ const generarCodigo = (nombre: string): string => {
 };
 
 export default function DependenciasManager() {
+    const municipio = useMunicipio();
     const [dependencias, setDependencias] = useState<Dependencia[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -66,6 +68,7 @@ export default function DependenciasManager() {
             const { data, error: fetchError } = await supabase
                 .from("dependencias")
                 .select("*")
+                .eq("municipio_id", municipio.id)
                 .order("nombre");
 
             if (fetchError) throw fetchError;
@@ -76,7 +79,7 @@ export default function DependenciasManager() {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [municipio.id]);
 
     useEffect(() => {
         loadDependencias();
@@ -227,6 +230,7 @@ export default function DependenciasManager() {
 
         try {
             const dataToSave = {
+                municipio_id: municipio.id,
                 nombre: formData.nombre.trim(),
                 codigo: formData.codigo.trim(),
                 latitud: formData.latitud,

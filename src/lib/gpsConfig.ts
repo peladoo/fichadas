@@ -7,21 +7,6 @@ export interface Ubicacion {
   nombre: string;
 }
 
-export const dependencias: Record<string, Ubicacion> = {
-  cic: {
-    lat: -31.771765084997554,
-    lng: -60.42306082350464,
-    radius: 100, // Radio estricto: 100 metros
-    nombre: "CIC"
-  },
-  nido: {
-    lat: -31.777360074698333,
-    lng: -60.43369446481205,
-    radius: 100, // Radio estricto: 100 metros
-    nombre: "NIDO"
-  }
-};
-
 /**
  * Tiempo mínimo entre fichadas del mismo usuario (en minutos)
  */
@@ -85,12 +70,13 @@ export const estaDentroDelRadio = (
  * Encuentra la dependencia más cercana a la ubicación del usuario
  */
 export const encontrarDependenciaCercana = (
-  posicionUsuario: { lat: number; lng: number }
+  posicionUsuario: { lat: number; lng: number },
+  lista: Ubicacion[],
 ): (Ubicacion & { distancia: number }) | null => {
   let dependenciaMasCercana: (Ubicacion & { distancia: number }) | null = null;
   let menorDistancia = Infinity;
 
-  Object.values(dependencias).forEach((dep) => {
+  lista.forEach((dep) => {
     const distancia = calcularDistancia(
       posicionUsuario.lat,
       posicionUsuario.lng,
@@ -114,13 +100,14 @@ export const encontrarDependenciaCercana = (
  * Valida si el usuario puede fichar desde su ubicación actual
  */
 export const validarUbicacionParaFichar = (
-  posicionUsuario: { lat: number; lng: number }
+  posicionUsuario: { lat: number; lng: number },
+  lista: Ubicacion[],
 ): {
   permitido: boolean;
   mensaje: string;
   dependenciaCercana: (Ubicacion & { distancia: number }) | null;
 } => {
-  const dependenciaCercana = encontrarDependenciaCercana(posicionUsuario);
+  const dependenciaCercana = encontrarDependenciaCercana(posicionUsuario, lista);
 
   if (!dependenciaCercana) {
     return {

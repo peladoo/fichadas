@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import { useMunicipio } from "@/components/MunicipioProvider";
 import { APP_VERSION } from "@/lib/version";
 import { FileText, RefreshCw, ArrowLeft, LogOut } from "lucide-react";
 import AdminTabs, { type AdminTabId, useInitialAdminTab } from "./admin/AdminTabs";
@@ -11,6 +12,7 @@ import TabHorasExtras from "./admin/TabHorasExtras";
 import TabConfiguracion from "./admin/TabConfiguracion";
 
 export default function AdminPanel() {
+  const municipio = useMunicipio();
   const initialTab = useInitialAdminTab();
   const [tab, setTab] = useState<AdminTabId>(initialTab);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -18,7 +20,7 @@ export default function AdminPanel() {
   const handleLogout = async () => {
     if (confirm("¿Está seguro que desea cerrar sesión?")) {
       await supabase.auth.signOut();
-      window.location.href = "/admin";
+      window.location.href = `/m/${municipio.slug}/admin`;
     }
   };
 
@@ -27,7 +29,7 @@ export default function AdminPanel() {
       <div className="max-w-7xl mx-auto">
         <div className="mb-4">
           <Link
-            href="/"
+            href={`/m/${municipio.slug}`}
             className="inline-flex items-center gap-2 text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] font-medium"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -46,7 +48,7 @@ export default function AdminPanel() {
                   Panel de Administración
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400">
-                  Gestión de fichadas - Recursos Humanos
+                  {municipio.nombre} · Recursos Humanos
                 </p>
               </div>
             </div>
@@ -78,7 +80,7 @@ export default function AdminPanel() {
 
         <div className="text-center mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
           <p className="text-xs text-gray-400 dark:text-gray-500">
-            Municipalidad de San Benito · v{APP_VERSION}
+            {municipio.nombre} · v{APP_VERSION}
           </p>
         </div>
       </div>

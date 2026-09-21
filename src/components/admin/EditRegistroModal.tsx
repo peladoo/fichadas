@@ -10,6 +10,7 @@ import {
   type TipoFichada,
 } from "@/lib/supabase";
 import { handleSupabaseError, isValidDNI, sanitizeDNI } from "@/lib/utils";
+import { useMunicipio } from "@/components/MunicipioProvider";
 
 export type EditTarget =
   | { kind: "normal"; registro?: Fichada }
@@ -48,6 +49,7 @@ export default function EditRegistroModal({
   onClose,
   onSaved,
 }: EditRegistroModalProps) {
+  const municipio = useMunicipio();
   const isNew = !target?.registro;
   const isExtra = target?.kind === "extra";
 
@@ -165,7 +167,7 @@ export default function EditRegistroModal({
         if (isNew) {
           const { error: insertError } = await supabase
             .from("fichadas_extras")
-            .insert([{ ...payload, origen: "Manual_RRHH" }]);
+            .insert([{ ...payload, municipio_id: municipio.id, origen: "Manual_RRHH" }]);
           if (insertError) throw insertError;
         } else {
           const { error: updateError } = await supabase
@@ -196,7 +198,7 @@ export default function EditRegistroModal({
         if (isNew) {
           const { error: insertError } = await supabase
             .from("fichadas")
-            .insert([{ ...payload, origen: "Manual_RRHH" }]);
+            .insert([{ ...payload, municipio_id: municipio.id, origen: "Manual_RRHH" }]);
           if (insertError) throw insertError;
         } else {
           const { error: updateError } = await supabase

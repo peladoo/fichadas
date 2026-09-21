@@ -7,6 +7,7 @@ interface FichadaSuccessProps {
     tipoFichada: TipoFichada;
     tipoJornada?: TipoJornada;
     dependenciaNombre: string;
+    municipioNombre?: string;
     onVolver: () => void;
 }
 
@@ -14,6 +15,7 @@ export default function FichadaSuccess({
     tipoFichada,
     tipoJornada = "normal",
     dependenciaNombre,
+    municipioNombre,
     onVolver,
 }: FichadaSuccessProps) {
     const isEntrada = tipoFichada === "entrada";
@@ -166,7 +168,7 @@ export default function FichadaSuccess({
                 {/* Footer */}
                 <div className="text-center mt-6">
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Municipalidad de San Benito
+                        {municipioNombre || "Sistema de fichadas"}
                     </p>
                 </div>
             </div>

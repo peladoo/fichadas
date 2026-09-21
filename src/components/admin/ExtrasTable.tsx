@@ -22,6 +22,7 @@ import {
   LIMITE_FICHADA_EXTRA_HORAS,
 } from "@/lib/jornadas";
 import LoadingSpinner from "../LoadingSpinner";
+import FotoImg from "@/components/FotoImg";
 
 interface ExtrasTableProps {
   extras: FichadaExtraConDeps[];
@@ -199,9 +200,8 @@ export default function ExtrasTable({
                   <div className="flex items-center gap-2">
                     {extra.foto_url_entrada ? (
                       <button onClick={() => onSelectExtra(extra)}>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={extra.foto_url_entrada}
+                        <FotoImg
+                          path={extra.foto_url_entrada}
                           alt="Entrada"
                           className="w-10 h-10 object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600"
                         />
@@ -227,9 +227,8 @@ export default function ExtrasTable({
                     <div className="flex items-center gap-2">
                       {extra.foto_url_salida ? (
                         <button onClick={() => onSelectExtra(extra)}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={extra.foto_url_salida}
+                          <FotoImg
+                            path={extra.foto_url_salida}
                             alt="Salida"
                             className="w-10 h-10 object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600"
                           />

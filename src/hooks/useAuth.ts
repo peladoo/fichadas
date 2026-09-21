@@ -3,6 +3,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { logger } from "@/lib/utils";
+import {
+    isPlatformAdmin,
+    userMunicipioId,
+    userRol,
+    type MunicipioRol,
+} from "@/lib/tenant";
 import type { User, Session } from "@supabase/supabase-js";
 
 export interface AuthState {
@@ -11,6 +17,17 @@ export interface AuthState {
     isAuthenticated: boolean;
     isLoading: boolean;
     error: string | null;
+    municipioId: string | null;
+    rol: MunicipioRol | null;
+    isPlatformAdmin: boolean;
+}
+
+function claimsFromUser(user: User | null) {
+    return {
+        municipioId: userMunicipioId(user),
+        rol: userRol(user),
+        isPlatformAdmin: isPlatformAdmin(user),
+    };
 }
 
 export function useAuth() {
@@ -20,6 +37,9 @@ export function useAuth() {
         isAuthenticated: false,
         isLoading: true,
         error: null,
+        municipioId: null,
+        rol: null,
+        isPlatformAdmin: false,
     });
 
     const checkSession = useCallback(async () => {
@@ -35,6 +55,7 @@ export function useAuth() {
                 isAuthenticated: !!session?.user,
                 isLoading: false,
                 error: null,
+                ...claimsFromUser(session?.user ?? null),
             }));
         } catch (error) {
             logger.error("Error al verificar sesión:", error);
@@ -64,6 +85,7 @@ export function useAuth() {
                 isAuthenticated: true,
                 isLoading: false,
                 error: null,
+                ...claimsFromUser(data.user),
             }));
 
             return { success: true };
@@ -104,6 +126,9 @@ export function useAuth() {
                 isAuthenticated: false,
                 isLoading: false,
                 error: null,
+                municipioId: null,
+                rol: null,
+                isPlatformAdmin: false,
             });
 
             return { success: true };
@@ -134,6 +159,7 @@ export function useAuth() {
                         session,
                         isAuthenticated: true,
                         isLoading: false,
+                        ...claimsFromUser(session.user),
                     }));
                 } else if (event === "SIGNED_OUT") {
                     setState({
@@ -142,6 +168,9 @@ export function useAuth() {
                         isAuthenticated: false,
                         isLoading: false,
                         error: null,
+                        municipioId: null,
+                        rol: null,
+                        isPlatformAdmin: false,
                     });
                 }
             }

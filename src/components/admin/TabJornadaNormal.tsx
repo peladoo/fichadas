@@ -22,6 +22,7 @@ import {
   rowsToCSV,
 } from "@/lib/export";
 import { emparejarJornadas, formatHoras, type Jornada } from "@/lib/jornadas";
+import { useMunicipio } from "@/components/MunicipioProvider";
 import { AlertCircle, Plus, List, Clock } from "lucide-react";
 import StatsCards from "./StatsCards";
 import FichadasFilters from "./FichadasFilters";
@@ -39,6 +40,7 @@ interface TabJornadaNormalProps {
 }
 
 export default function TabJornadaNormal({ refreshKey }: TabJornadaNormalProps) {
+  const municipio = useMunicipio();
   const [fichadas, setFichadas] = useState<FichadaConDependencia[]>([]);
   const [displayFichadas, setDisplayFichadas] = useState<FichadaConDependencia[]>(
     [],
@@ -136,7 +138,10 @@ export default function TabJornadaNormal({ refreshKey }: TabJornadaNormalProps) 
     let offset = 0;
     let hasMore = true;
     while (hasMore) {
-      const baseQuery = supabase.from("fichadas").select("*");
+      const baseQuery = supabase
+        .from("fichadas")
+        .select("*")
+        .eq("municipio_id", municipio.id);
       const { data, error: fetchError } = await buildFilteredQuery(baseQuery)
         .order("fecha_hora", { ascending: false })
         .range(offset, offset + EXPORT_BATCH_SIZE - 1);
@@ -158,6 +163,7 @@ export default function TabJornadaNormal({ refreshKey }: TabJornadaNormalProps) 
       const { data: depData, error: depError } = await supabase
         .from("dependencias")
         .select("*")
+        .eq("municipio_id", municipio.id)
         .order("nombre");
       if (depError) throw depError;
       setDependencias(depData || []);
@@ -170,7 +176,10 @@ export default function TabJornadaNormal({ refreshKey }: TabJornadaNormalProps) 
       } else {
         const from = (currentPage - 1) * itemsPerPage;
         const to = from + itemsPerPage - 1;
-        const baseQuery = supabase.from("fichadas").select("*", { count: "exact" });
+        const baseQuery = supabase
+          .from("fichadas")
+          .select("*", { count: "exact" })
+          .eq("municipio_id", municipio.id);
         const {
           data: fichadasData,
           error: fichadasError,
@@ -199,6 +208,7 @@ export default function TabJornadaNormal({ refreshKey }: TabJornadaNormalProps) 
     fechaDesde,
     fechaHasta,
     vista,
+    municipio.id,
   ]);
 
   useEffect(() => {

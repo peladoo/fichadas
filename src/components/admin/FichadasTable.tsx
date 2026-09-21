@@ -18,6 +18,7 @@ import {
 import type { Fichada, Dependencia } from "@/lib/supabase";
 import { calcularDistancia } from "@/lib/gpsConfig";
 import LoadingSpinner from "../LoadingSpinner";
+import FotoImg from "@/components/FotoImg";
 
 interface FichadaConDependencia extends Fichada {
   dependencia?: Dependencia;
@@ -133,9 +134,8 @@ export default function FichadasTable({
                       onClick={() => onSelectFichada(fichada)}
                       className="group relative"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={fichada.foto_url}
+                      <FotoImg
+                        path={fichada.foto_url}
                         alt="Miniatura"
                         className="w-16 h-16 object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600 group-hover:border-[#b6c544] transition-all cursor-pointer shadow-sm group-hover:shadow-md"
                       />

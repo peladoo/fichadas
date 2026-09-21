@@ -7,16 +7,16 @@ import {
   supabase,
   type FichadaInsert,
   type FichadaExtraInsert,
-  type FichadaExtraCierre,
   type Dependencia,
   type TipoFichada,
   type TipoJornada,
 } from "@/lib/supabase";
 import {
-  validarUbicacionParaFichar,
   validarUbicacionParaDependencia,
   encontrarDependenciaMasCercanaDeLista,
 } from "@/lib/gpsConfig";
+import { useMunicipio } from "@/components/MunicipioProvider";
+import { uploadFichadaFoto } from "@/lib/storage";
 import {
   sanitizeDNI,
   isValidDNI,
@@ -99,6 +99,7 @@ const DEVICE_INFO = detectDevice();
 // ---------------------------------------------------------------------------
 
 export default function FichadasForm() {
+  const municipio = useMunicipio();
   const [documento, setDocumento] = useState("");
   // photoBlob almacena la imagen YA comprimida (WebP) lista para subir
   const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
@@ -266,6 +267,19 @@ export default function FichadasForm() {
     );
   }, []); // sin dependencias: usa solo refs y constantes externas
 
+  const loadDependencias = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("get_dependencias_publicas", {
+        municipio_input: municipio.id,
+      });
+      if (error) throw error;
+      if (isMountedRef.current) setDependencias(data || []);
+    } catch (err) {
+      logger.error("Error cargando dependencias:", err);
+      if (isMountedRef.current) setError(handleSupabaseError(err));
+    }
+  }, [municipio.id]);
+
   // ---------------------------------------------------------------------------
   // Efecto inicial: cargar dependencias + solicitar GPS una vez
   // No hay setInterval — si el GPS falla, el usuario usa el botón "Reintentar"
@@ -283,7 +297,7 @@ export default function FichadasForm() {
         clearTimeout(gpsRetryTimerRef.current);
       }
     };
-  }, [solicitarUbicacion]);
+  }, [solicitarUbicacion, loadDependencias]);
 
   // Auto-seleccionar la dependencia más cercana cuando llega la ubicación
   useEffect(() => {
@@ -318,7 +332,7 @@ export default function FichadasForm() {
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const estado = await getEstadoEmpleado(dniSanitizado);
+        const estado = await getEstadoEmpleado(dniSanitizado, municipio.id);
         if (!cancelled && isMountedRef.current) {
           setEstadoEmpleado(estado);
         }
@@ -335,7 +349,7 @@ export default function FichadasForm() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [documento]);
+    }, [documento, municipio.id]);
 
   useEffect(() => {
     if (!estadoEmpleado) {
@@ -362,29 +376,27 @@ export default function FichadasForm() {
       setLocationValidation(validation);
       logger.log("📍 Validación GPS (dependencia):", validation);
     } else {
-      const validation = validarUbicacionParaFichar(location);
+      const cercana = encontrarDependenciaMasCercanaDeLista(
+        location,
+        dependencias,
+      );
+      if (!cercana) {
+        setLocationValidation({
+          permitido: false,
+          mensaje: "No hay dependencias con GPS configurado en este municipio",
+        });
+        return;
+      }
+      const validation = validarUbicacionParaDependencia(location, {
+        nombre: cercana.nombre,
+        latitud: cercana.latitud,
+        longitud: cercana.longitud,
+        radio_metros: cercana.radio_metros,
+      });
       setLocationValidation(validation);
       logger.log("📍 Validación GPS (general):", validation);
     }
-  }, [location, dependencia]);
-
-  // ---------------------------------------------------------------------------
-  // Carga de dependencias desde Supabase
-  // ---------------------------------------------------------------------------
-
-  const loadDependencias = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from("dependencias")
-        .select("*")
-        .order("nombre");
-      if (error) throw error;
-      if (isMountedRef.current) setDependencias(data || []);
-    } catch (err) {
-      logger.error("Error cargando dependencias:", err);
-      if (isMountedRef.current) setError(handleSupabaseError(err));
-    }
-  }, []);
+  }, [location, dependencia, dependencias]);
 
   // ---------------------------------------------------------------------------
   // Captura de foto — comprime a WebP 640px antes de almacenar en estado
@@ -478,7 +490,7 @@ export default function FichadasForm() {
       setError("");
 
       try {
-        const estado = await getEstadoEmpleado(dniSanitizado);
+        const estado = await getEstadoEmpleado(dniSanitizado, municipio.id);
         const validacion = validarAccion(estado, tipoJornada, tipoFichada);
         if (validacion.alerta) {
           setAlerta(validacion.alerta);
@@ -503,20 +515,12 @@ export default function FichadasForm() {
         const jornadaTag =
           tipoJornada === "extra" ? `extra-${tipoPersistido}` : tipoPersistido;
         const fileName = `${Date.now()}-${dniSanitizado}-${jornadaTag}.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("fotos-fichadas")
-          .upload(fileName, photoBlob, {
-            contentType,
-            // upsert: false por defecto — evita sobreescritura accidental
-          });
-
-        if (uploadError) throw uploadError;
-
-        // Obtener URL pública (operación local, sin round-trip a la red)
-        const { data: urlData } = supabase.storage
-          .from("fotos-fichadas")
-          .getPublicUrl(fileName);
+        const fotoPath = await uploadFichadaFoto(
+          municipio.id,
+          fileName,
+          photoBlob,
+          contentType,
+        );
 
         // --- Etapa 2: insertar registro en la base de datos ---
         setSubmitStage("guardando");
@@ -524,9 +528,10 @@ export default function FichadasForm() {
         if (tipoJornada === "extra") {
           if (tipoPersistido === "entrada") {
             const extraData: FichadaExtraInsert = {
+              municipio_id: municipio.id,
               documento: dniSanitizado,
               dependencia_id_entrada: dependencia.id,
-              foto_url_entrada: urlData.publicUrl,
+              foto_url_entrada: fotoPath,
               latitud_entrada: location.lat,
               longitud_entrada: location.lng,
             };
@@ -537,22 +542,22 @@ export default function FichadasForm() {
             if (insertError) throw insertError;
           } else {
             const extraAbierta = estado.extraAbierta;
-            const cierre: FichadaExtraCierre = {
-              dependencia_id_salida: dependencia.id,
-              foto_url_salida: urlData.publicUrl,
-              latitud_salida: location.lat,
-              longitud_salida: location.lng,
-              fecha_hora_salida: new Date().toISOString(),
-            };
-            logger.log("Cerrando fichada extra:", cierre);
-            const { data: updated, error: updateError } = await supabase
-              .from("fichadas_extras")
-              .update(cierre)
-              .eq("id", extraAbierta!.id)
-              .is("fecha_hora_salida", null)
-              .select("id");
-            if (updateError) throw updateError;
-            if (!updated || updated.length === 0) {
+            const fechaSalida = new Date().toISOString();
+            logger.log("Cerrando fichada extra:", extraAbierta?.id);
+            const { data: closedId, error: closeError } = await supabase.rpc(
+              "cerrar_fichada_extra",
+              {
+                extra_id: extraAbierta!.id,
+                municipio_input: municipio.id,
+                dependencia_salida: dependencia.id,
+                foto_salida: fotoPath,
+                lat_salida: location.lat,
+                lng_salida: location.lng,
+                fecha_salida: fechaSalida,
+              },
+            );
+            if (closeError) throw closeError;
+            if (!closedId) {
               setError(
                 "La fichada de horas extras ya fue cerrada. Actualizá e intentá de nuevo.",
               );
@@ -561,10 +566,11 @@ export default function FichadasForm() {
           }
         } else {
           const fichadaData: FichadaInsert = {
+            municipio_id: municipio.id,
             dependencia_id: dependencia.id,
             documento: dniSanitizado,
             tipo: tipoPersistido,
-            foto_url: urlData.publicUrl,
+            foto_url: fotoPath,
             latitud: location.lat,
             longitud: location.lng,
           };
@@ -606,7 +612,16 @@ export default function FichadasForm() {
         setSubmitStage(null);
       }
     },
-    [documento, dependencia, photoBlob, photoPreview, location, tipoFichada, tipoJornada],
+    [
+      documento,
+      dependencia,
+      photoBlob,
+      photoPreview,
+      location,
+      tipoFichada,
+      tipoJornada,
+      municipio.id,
+    ],
   );
 
   // ---------------------------------------------------------------------------
@@ -637,6 +652,7 @@ export default function FichadasForm() {
         tipoFichada={fichadaExitosa.tipoFichada}
         tipoJornada={fichadaExitosa.tipoJornada}
         dependenciaNombre={fichadaExitosa.dependenciaNombre}
+        municipioNombre={municipio.nombre}
         onVolver={() => setFichadaExitosa(null)}
       />
     );
@@ -649,13 +665,26 @@ export default function FichadasForm() {
           {/* Header */}
           <div className="text-center space-y-2">
             <div className="flex justify-center">
-              <div className="bg-[#b6c544] p-3 rounded-full">
-                <Building2 className="w-8 h-8 text-white" />
-              </div>
+              {municipio.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={municipio.logo_url}
+                  alt={municipio.nombre}
+                  className="h-16 w-16 object-contain rounded-full"
+                />
+              ) : (
+                <div
+                  className="p-3 rounded-full"
+                  style={{ backgroundColor: municipio.color_primario || "#b6c544" }}
+                >
+                  <Building2 className="w-8 h-8 text-white" />
+                </div>
+              )}
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
               Registro de Fichada
             </h1>
+            <p className="text-gray-600 dark:text-gray-400">{municipio.nombre}</p>
             {dependencia && (
               <p className="text-gray-600 dark:text-gray-400">
                 {dependencia.nombre}
@@ -873,12 +902,8 @@ export default function FichadasForm() {
                       </p>
                       <ul className="text-orange-600 dark:text-orange-400 text-xs mt-2 ml-4 list-disc space-y-1">
                         <li>Tener GPS/ubicación activado en tu dispositivo</li>
-                        <li>
-                          Dar permisos de ubicación a este sitio en el navegador
-                        </li>
-                        <li>
-                          Estar en BIBLIOTECA, CIC o NIDO (a menos de 100m)
-                        </li>
+                        <li>Dar permisos de ubicación a este sitio en el navegador</li>
+                        <li>Estar cerca de una dependencia municipal</li>
                       </ul>
                     </div>
                   </div>
@@ -965,10 +990,10 @@ export default function FichadasForm() {
         {/* Footer */}
         <div className="text-center mt-6 space-y-2">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Municipalidad de San Benito
+            {municipio.nombre}
           </p>
           <a
-            href="/admin"
+            href={`/m/${municipio.slug}/admin`}
             className="inline-block text-sm text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] hover:underline font-medium"
           >
             Acceso Recursos Humanos →

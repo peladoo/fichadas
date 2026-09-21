@@ -12,6 +12,7 @@ import {
 import type { Jornada } from "@/lib/jornadas";
 import { formatHoras, LIMITE_JORNADA_NORMAL_HORAS } from "@/lib/jornadas";
 import type { Dependencia } from "@/lib/supabase";
+import FotoImg from "@/components/FotoImg";
 import LoadingSpinner from "../LoadingSpinner";
 
 interface JornadasTableProps {
@@ -104,9 +105,8 @@ export default function JornadasTable({
                     className="flex items-center gap-2 group"
                   >
                     {jornada.entrada.foto_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={jornada.entrada.foto_url}
+                      <FotoImg
+                        path={jornada.entrada.foto_url}
                         alt="Entrada"
                         className="w-10 h-10 object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600 group-hover:border-[#b6c544]"
                       />
@@ -131,9 +131,8 @@ export default function JornadasTable({
                       className="flex items-center gap-2 group"
                     >
                       {jornada.salida.foto_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={jornada.salida.foto_url}
+                        <FotoImg
+                          path={jornada.salida.foto_url}
                           alt="Salida"
                           className="w-10 h-10 object-cover rounded-lg border-2 border-gray-200 dark:border-gray-600 group-hover:border-[#b6c544]"
                         />

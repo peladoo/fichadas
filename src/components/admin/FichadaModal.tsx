@@ -12,6 +12,7 @@ import {
   Download,
 } from "lucide-react";
 import type { Fichada, Dependencia } from "@/lib/supabase";
+import FotoImg, { FotoDownloadLink } from "@/components/FotoImg";
 
 interface FichadaConDependencia extends Fichada {
   dependencia?: Dependencia;
@@ -158,23 +159,18 @@ export default function FichadaModal({ fichada, onClose }: FichadaModalProps) {
                 <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">
                   Fotografía
                 </h4>
-                <a
-                  href={fichada.foto_url}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <FotoDownloadLink
+                  path={fichada.foto_url!}
                   className="flex items-center gap-2 text-sm text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] font-medium"
                 >
                   <Download className="w-4 h-4" />
                   Descargar
-                </a>
+                </FotoDownloadLink>
               </div>
               <div className="relative group overflow-hidden rounded-2xl border-4 border-gray-200 dark:border-gray-700 shadow-lg">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={fichada.foto_url}
+                <FotoImg
+                  path={fichada.foto_url}
                   alt="Foto de fichada"
-                  loading="lazy"
                   className="w-full h-auto object-contain max-h-[500px] transition-transform duration-300 group-hover:scale-105"
                 />
               </div>

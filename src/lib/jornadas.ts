@@ -106,29 +106,21 @@ export const evaluarExtra = (
 
 export const getEstadoEmpleado = async (
   documento: string,
+  municipioId: string,
 ): Promise<EstadoEmpleado> => {
-  const [extrasRes, fichadasRes] = await Promise.all([
-    supabase
-      .from("fichadas_extras")
-      .select("*")
-      .eq("documento", documento)
-      .is("fecha_hora_salida", null)
-      .order("fecha_hora_entrada", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("fichadas")
-      .select("*")
-      .eq("documento", documento)
-      .order("fecha_hora", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const { data, error } = await supabase.rpc("get_estado_fichadas", {
+    dni_input: documento,
+    municipio_input: municipioId,
+  });
 
-  if (extrasRes.error) throw extrasRes.error;
-  if (fichadasRes.error) throw fichadasRes.error;
+  if (error) throw error;
 
-  const extraAbierta = (extrasRes.data as FichadaExtra | null) ?? null;
+  const payload = (data ?? {}) as {
+    extra_abierta?: FichadaExtra | null;
+    ultima_fichada?: Fichada | null;
+  };
+
+  const extraAbierta = payload.extra_abierta ?? null;
   if (extraAbierta) {
     return {
       estado: "extra_abierta",
@@ -137,7 +129,7 @@ export const getEstadoEmpleado = async (
     };
   }
 
-  const ultima = (fichadasRes.data as Fichada | null) ?? null;
+  const ultima = payload.ultima_fichada ?? null;
   if (ultima?.tipo === "entrada") {
     const horasDesde = horasEntre(ultima.fecha_hora, new Date().toISOString());
     if (horasDesde <= VENTANA_NORMAL_ABIERTA_HORAS) {

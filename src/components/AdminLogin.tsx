@@ -4,12 +4,14 @@ import { useState, FormEvent } from 'react';
 import Link from 'next/link';
 import { Lock, User, Eye, EyeOff, ShieldCheck, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useMunicipio } from '@/components/MunicipioProvider';
 
 interface AdminLoginProps {
   onLoginSuccess: () => void;
 }
 
 export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
+  const municipio = useMunicipio();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -69,7 +71,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
             Panel Administrativo
           </h1>
           <p className="text-white/90">
-            Municipalidad de San Benito
+            {municipio.nombre}
           </p>
         </div>
 
@@ -109,7 +111,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="block w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-gray-900 placeholder-gray-400"
-                  placeholder="tu-email@sanbenito.gob.ar"
+                  placeholder="tu-email@municipio.gob.ar"
                   required
                   autoComplete="email"
                 />
@@ -182,7 +184,7 @@ export default function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
         {/* Link de regreso */}
         <div className="text-center mt-6">
           <Link
-            href="/"
+            href={`/m/${municipio.slug}`}
             className="text-white/80 hover:text-white text-sm font-medium transition"
           >
             ← Volver al registro de fichadas

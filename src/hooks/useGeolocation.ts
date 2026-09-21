@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { validarUbicacionParaFichar } from "@/lib/gpsConfig";
 import { logger } from "@/lib/utils";
 
 export interface GeolocationState {
@@ -143,12 +142,14 @@ export function useGeolocation(options: UseGeolocationOptions = {}) {
                 accuracy: position.coords.accuracy,
             };
 
-            const validation = validarUbicacionParaFichar(userLocation);
-            logger.log("📍 Validación GPS:", validation);
+            logger.log("📍 Ubicación GPS:", userLocation);
 
             updateState({
                 location: userLocation,
-                locationValidation: validation,
+                locationValidation: {
+                    permitido: true,
+                    mensaje: "Ubicación obtenida",
+                },
                 error: "",
                 loading: false,
                 permissionDenied: false,
