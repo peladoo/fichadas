@@ -5,6 +5,7 @@
   --background: #ffffff;
   --foreground: #4d4d4d;
   --muni-primary: #b6c544;
+  --muni-on-primary: #1a1a1a;
   
   /* Paleta Municipal */
   --color-primary: var(--muni-primary);
@@ -51,4 +52,64 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+.bg-muni-canvas {
+  background-color: color-mix(in srgb, var(--muni-primary) 14%, white);
+}
+
+.bg-muni {
+  background-color: var(--muni-primary);
+  color: var(--muni-on-primary);
+}
+
+.bg-muni:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--muni-primary) 82%, black);
+}
+
+.bg-muni:disabled {
+  background-color: #9ca3af;
+  color: #ffffff;
+  cursor: not-allowed;
+}
+
+.focus-muni:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--muni-primary);
+}
+
+.option-muni-active {
+  background-color: color-mix(in srgb, var(--muni-primary) 18%, white);
+  border-color: var(--muni-primary);
+  color: color-mix(in srgb, var(--muni-primary) 45%, black);
+}
+
+.link-muni {
+  color: color-mix(in srgb, var(--muni-primary) 40%, black);
+}
+
+.link-muni:hover {
+  color: color-mix(in srgb, var(--muni-primary) 20%, black);
+}
+
+.spinner-muni {
+  border-bottom-color: var(--muni-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+  .bg-muni-canvas {
+    background-color: color-mix(in srgb, var(--muni-primary) 16%, #111827);
+  }
+
+  .option-muni-active {
+    background-color: color-mix(in srgb, var(--muni-primary) 22%, transparent);
+    border-color: var(--muni-primary);
+    color: var(--muni-primary);
+  }
+
+  .link-muni,
+  .link-muni:hover {
+    color: var(--muni-primary);
+  }
 }

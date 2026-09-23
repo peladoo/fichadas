@@ -659,7 +659,7 @@ export default function FichadasForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
+    <div className="min-h-screen bg-muni-canvas py-8 px-4">
       <div className="max-w-lg mx-auto">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6 space-y-6">
           {/* Header */}
@@ -673,11 +673,8 @@ export default function FichadasForm() {
                   className="h-16 w-16 object-contain rounded-full"
                 />
               ) : (
-                <div
-                  className="p-3 rounded-full"
-                  style={{ backgroundColor: municipio.color_primario || "#b6c544" }}
-                >
-                  <Building2 className="w-8 h-8 text-white" />
+                <div className="p-3 rounded-full bg-muni">
+                  <Building2 className="w-8 h-8" />
                 </div>
               )}
             </div>
@@ -725,7 +722,7 @@ export default function FichadasForm() {
                 onChange={(e) => setDocumento(sanitizeDNI(e.target.value))}
                 placeholder="Ingrese su DNI"
                 maxLength={8}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus-muni dark:bg-gray-700 dark:text-white"
                 disabled={loading}
                 required
               />
@@ -743,7 +740,7 @@ export default function FichadasForm() {
                   disabled={loading}
                   className={`flex items-center justify-center gap-2 px-4 py-4 rounded-lg border-2 transition ${
                     tipoJornada === "normal"
-                      ? "bg-[#f0f9e6] border-[#b6c544] text-[#076633] dark:bg-[#b6c544]/20 dark:border-[#b6c544] dark:text-[#b6c544]"
+                      ? "option-muni-active"
                       : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
                   }`}
                 >
@@ -818,7 +815,7 @@ export default function FichadasForm() {
                   );
                   setDependencia(selected || null);
                 }}
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus-muni dark:bg-gray-700 dark:text-white"
                 disabled={loading}
                 required
               >
@@ -936,7 +933,7 @@ export default function FichadasForm() {
               disabled={
                 loading || !dependencia || !documento || !photoBlob || !location
               }
-              className="w-full bg-[#b6c544] hover:bg-[#9fb338] disabled:bg-gray-400 text-white font-medium py-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-lg shadow-lg hover:shadow-xl"
+              className="w-full bg-muni font-medium py-4 rounded-lg transition-colors flex items-center justify-center gap-2 text-lg shadow-lg hover:shadow-xl"
             >
               {loading ? (
                 <>
@@ -994,7 +991,7 @@ export default function FichadasForm() {
           </p>
           <a
             href={`/m/${municipio.slug}/admin`}
-            className="inline-block text-sm text-[#076633] hover:text-[#054d26] dark:text-[#b6c544] hover:underline font-medium"
+            className="inline-block text-sm link-muni hover:underline font-medium"
           >
             Acceso Recursos Humanos →
           </a>
